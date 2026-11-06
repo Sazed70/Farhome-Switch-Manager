@@ -60,10 +60,10 @@ async def websocket_get_config(hass, connection, msg):
 
 
 @websocket_api.require_admin
-@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/config/save', vol.Required('config'): dict, vol.Optional('metadata'): vol.Any(dict, None), vol.Optional('expected_revision'): vol.Any(str, None)})
+@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/config/save', vol.Required('config'): dict, vol.Optional('metadata'): vol.Any(dict, None), vol.Optional('expected_revision'): vol.Any(str, None), vol.Optional('quick_actions'): list})
 @websocket_api.async_response
 async def websocket_save_config(hass, connection, msg):
-    await async_reply(connection, msg, async_save_config(hass, msg['config'], msg.get('metadata'), msg.get('expected_revision')))
+    await async_reply(connection, msg, async_save_config(hass, msg['config'], msg.get('metadata'), msg.get('expected_revision'), quick_actions=msg.get('quick_actions')))
 
 
 @websocket_api.require_admin

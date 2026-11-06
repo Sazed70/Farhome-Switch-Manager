@@ -11,6 +11,7 @@
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/.test-build/
 
 # Local AI assistant instructions (kept locally, not tracked)
 CLAUDE.md
