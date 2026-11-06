@@ -13,6 +13,7 @@ The inherited application code and device blueprints remain unchanged from the [
 ## Planned experience
 
 - A page for each room, with buttons and rotary controllers grouped and ordered by model.
+- Device thumbnails in the list and editor, matched to the verified model, with an icon fallback when no image is available.
 - A device view showing current assignments and controls for supported gestures: single click, double click, hold and rotation.
 - Editable actions and targets for lights, fans, plugs and other supported entities, with parameters suited to each target's capabilities.
 - Support for the existing HOBEIAN pattern: click to select a light from a configured list, then rotate to adjust its brightness, with independent double-click and hold actions.

@@ -22,6 +22,7 @@ Repository inizializzato il 6 novembre 2026. Interfaccia Farhome in progettazion
 5. Supporto della logica HOBEIAN già utilizzata: click per selezionare una luce da un elenco configurato, rotella per regolarne la luminosità, doppio click e pressione prolungata con funzioni indipendenti. Non assumere la stessa configurazione per tutte le manopole.
 6. Per i selettori, distinguere il target attivo dall'elenco configurato e dal suo ordine.
 7. Il ciclo di selezione misto fra tipi di target diversi, come luci e ventilatori nello stesso elenco, resta fuori dal perimetro attuale.
+8. Miniatura del modello nell'elenco e nel dettaglio: riutilizzare le immagini disponibili in Zigbee2MQTT o nel blueprint associato, con identificazione verificata, attribuzioni e fallback quando la foto manca.
 
 ## Vincoli e prossimi passi
 
