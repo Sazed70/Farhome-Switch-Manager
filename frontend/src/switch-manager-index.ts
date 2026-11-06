@@ -49,6 +49,7 @@ export class SwitchManagerIndex extends LitElement {
   @state() private _filter = "";
   @state() private _sortColumn = "name";
   @state() private _sortDirection: "asc" | "desc" = "asc";
+  private _revisions: Record<string, string> = {};
 
   connectedCallback() {
     super.connectedCallback();
@@ -269,6 +270,7 @@ export class SwitchManagerIndex extends LitElement {
     this.hass
       .callWS<ConfigsResponse>({ type: wsType("configs") })
       .then((res) => {
+        this._revisions = res.revisions || {};
         const items: SwitchListItem[] = [];
         Object.values(res.configs).forEach((sw: any) => {
           const bp = sw.valid_blueprint
@@ -295,11 +297,26 @@ export class SwitchManagerIndex extends LitElement {
   }
 
   private async _toggleEnabled(switchId: string, currentEnabled: boolean) {
+    if (!currentEnabled) {
+      showDialog(this, "switch-manager-dialog-confirm", () => import("./dialogs/confirm"), {
+        title: "Attivare il pulsante?",
+        text: "Verifica dispositivo, blueprint e automazioni concorrenti. Le automazioni esterne non verranno disattivate.",
+        confirmText: "Ho verificato, attiva", dismissText: "Annulla",
+        confirm: () => this._applyEnabled(switchId, true),
+      });
+      return;
+    }
+    await this._applyEnabled(switchId, false);
+  }
+
+  private async _applyEnabled(switchId: string, enabled: boolean) {
     try {
       const res = await this.hass.callWS<{ enabled: boolean }>({
         type: wsType("config/enabled"),
-        enabled: !currentEnabled,
+        enabled,
         config_id: switchId,
+        expected_revision: this._revisions[switchId],
+        conflict_check: enabled,
       });
       this._populateSwitches();
       showToast(this, `Switch ${res.enabled ? "Enabled" : "Disabled"}`);
@@ -313,6 +330,7 @@ export class SwitchManagerIndex extends LitElement {
       const res = await this.hass.callWS<{ config_id: string }>({
         type: wsType("config/duplicate"),
         config_id: switchId,
+        expected_revision: this._revisions[switchId],
       });
       showToast(this, "Switch Duplicated");
       navigate(navigateTo(`edit/${res.config_id}`));
@@ -343,6 +361,7 @@ export class SwitchManagerIndex extends LitElement {
       await this.hass.callWS({
         type: wsType("config/delete"),
         config_id: switchId.toString(),
+        expected_revision: this._revisions[switchId],
       });
       this._populateSwitches();
       showToast(this, "Switch Deleted");

@@ -3,6 +3,8 @@ from __future__ import annotations
 from .const import LOGGER
 from .models import ManagedSwitchConfig
 import attr
+import json
+from copy import deepcopy
 
 from homeassistant.helpers.storage import Store
 
@@ -88,9 +90,26 @@ class SwitchManagerStore:
         return self.data.asdict()
 
     def get_available_id( self ) -> str:
-        if not any(self.data.managed_switches):
-            return '0'            
-        return str( int(list(self.data.managed_switches.keys())[-1]) + 1 );
+        ids = [int(key) for key in self.data.managed_switches if str(key).isdigit()]
+        return str(max(ids, default=-1) + 1)
+
+    def plain_data(self):
+        """Take a persistence snapshot without retaining runtime script references."""
+        return json.loads(json.dumps(self.asdict(), default=lambda value: value.as_dict()))
+
+    async def async_write_config(self, config_id, config):
+        """Persist before replacing the in-memory store; callers serialize writes."""
+        candidate = self.plain_data()
+        fields = ('name', 'enabled', 'blueprint', 'identifier', 'variables', 'rotate', 'buttons')
+        candidate['managed_switches'][str(config_id)] = {key: deepcopy(config[key]) for key in fields}
+        await self.store.async_save(candidate)
+        self.data = SwitchManagerStoreData.from_dict(candidate)
+
+    async def async_delete_config(self, config_id):
+        candidate = self.plain_data()
+        candidate['managed_switches'].pop(str(config_id), None)
+        await self.store.async_save(candidate)
+        self.data = SwitchManagerStoreData.from_dict(candidate)
             
     async def set_managed_switch( self, config_data: ManagedSwitchConfig ):        
         config = self.data.managed_switches.get(int(config_data.id), SwitchManagerManagedSwitchData())

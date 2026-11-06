@@ -71,6 +71,7 @@ export class SwitchManagerSwitchEditor extends LitElement {
   @state() private _debug = false;
   @state() private _block_save = false;
   @state() private _errors?: string;
+  private _revision?: string;
 
   @query("#switch-svg") svg!: SVGSVGElement;
   @query("switch-manager-button-actions")
@@ -327,6 +328,10 @@ export class SwitchManagerSwitchEditor extends LitElement {
   }
 
   private _loadConfig() {
+    if (this.config && this._dirty) {
+      this._errors = "La configurazione remota è cambiata. Conserva la bozza e ricarica prima di salvare.";
+      return;
+    }
     if ("id" in this.params) {
       this.is_new = false;
       this.hass
@@ -334,7 +339,14 @@ export class SwitchManagerSwitchEditor extends LitElement {
           type: wsType("configs"),
           config_id: this.params.id,
         })
-        .then((res) => this._setConfig(res.config!));
+        .then((res) => {
+          if (this.config && this._dirty) {
+            this._errors = "La configurazione remota è cambiata. La bozza è stata conservata.";
+            return;
+          }
+          this._revision = res.revision;
+          this._setConfig(res.config!);
+        });
     } else {
       this.is_new = true;
       this._dirty = true;
@@ -518,19 +530,22 @@ export class SwitchManagerSwitchEditor extends LitElement {
     this.hass
       .callWS<SaveConfigResponse>({
         type: wsType("config/save"),
+        expected_revision: this._revision,
         config: {
           ...this.config,
           blueprint: (this.config.blueprint as any).id,
         },
       })
       .then((res) => {
+        this._revision = res.revision;
         if (this.is_new) {
           this.is_new = false;
           this.config!.id = res.config_id;
           navigate(navigateTo(`edit/${res.config_id}`));
-          this._monitor();
         }
-        showToast(this, "Switch Saved");
+        if (!this._dirty) this._setConfig(res.config);
+        else if (this.config) this.config.enabled = res.config.enabled;
+        showToast(this, this._dirty ? "Salvato. Le modifiche successive restano nella bozza." : "Switch Saved");
       })
       .catch((err) => {
         showToast(this, err.message);
@@ -647,13 +662,37 @@ export class SwitchManagerSwitchEditor extends LitElement {
 
   private _toggleEnabled() {
     if (!this.config || this.is_new) return;
-    this.config.enabled = !this.config.enabled;
-    this.hass.callWS({
-      type: wsType("config/enabled"),
-      enabled: this.config.enabled,
-      config_id: this.config.id,
-    });
-    this.requestUpdate("config");
+    if (this._dirty || this._block_save) {
+      showToast(this, "Salva o annulla le modifiche prima di cambiare attivazione.");
+      return;
+    }
+    if (!this.config.enabled) {
+      showDialog(this, "switch-manager-dialog-confirm", () => import("./dialogs/confirm"), {
+        title: "Attivare il pulsante?",
+        text: "Verifica dispositivo, blueprint e automazioni concorrenti. Le automazioni esterne non verranno disattivate.",
+        confirmText: "Ho verificato, attiva", dismissText: "Annulla",
+        confirm: () => this._applyEnabled(true),
+      });
+      return;
+    }
+    void this._applyEnabled(false);
+  }
+
+  private async _applyEnabled(enabled: boolean) {
+    this._block_save = true;
+    try {
+      const res = await this.hass.callWS<SaveConfigResponse>({
+        type: wsType("config/enabled"), enabled, config_id: this.config!.id,
+        expected_revision: this._revision, conflict_check: enabled,
+      });
+      this._revision = res.revision;
+      this._setConfig(res.config);
+    } catch (err: any) {
+      this._errors = err.message;
+      showToast(this, err.message);
+    } finally {
+      this._block_save = false;
+    }
   }
 
   private _fixMismatch() {
@@ -663,6 +702,7 @@ export class SwitchManagerSwitchEditor extends LitElement {
         type: wsType("config/save"),
         config: { ...this.config, blueprint: (this.config.blueprint as any).id },
         fix_mismatch: true,
+        expected_revision: this._revision,
       })
       .then((res) => {
         // The backend reshapes the buttons to the blueprint, so adopt the config it
@@ -673,6 +713,7 @@ export class SwitchManagerSwitchEditor extends LitElement {
         this.button_index = 0;
         this.action_index = 0;
         this._setConfig(res.config);
+        this._revision = res.revision;
         showToast(this, "Mismatch Fixed");
       })
       .catch((err) => {
@@ -694,7 +735,7 @@ export class SwitchManagerSwitchEditor extends LitElement {
         dismissText: "Cancel",
         confirm: () => {
           this.hass
-            .callWS({ type: wsType("config/delete"), config_id: this.config!.id!.toString() })
+            .callWS({ type: wsType("config/delete"), config_id: this.config!.id!.toString(), expected_revision: this._revision })
             .then(() => navigate(navigateTo()));
         },
         confirmation: true,
