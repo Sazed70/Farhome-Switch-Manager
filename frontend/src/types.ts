@@ -1,3 +1,4 @@
+// Farhome modifications 2026-11-06: revision-aware transport response fields.
 // Home Assistant types (minimal subset - these come from the running HA instance)
 export interface HomeAssistant {
   callWS: <T>(msg: Record<string, unknown>) => Promise<T>;

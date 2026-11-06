@@ -1,3 +1,4 @@
+# Farhome modifications 2026-11-06: Pulsanti sidebar and content-based bundle cache key.
 from hashlib import sha256
 from pathlib import Path
 

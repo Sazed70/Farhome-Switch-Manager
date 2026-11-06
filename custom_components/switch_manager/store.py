@@ -1,3 +1,4 @@
+# Farhome modifications 2026-11-06: persist validated snapshots before replacing runtime data.
 from __future__ import annotations
 
 from .const import LOGGER

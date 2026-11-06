@@ -1,3 +1,4 @@
+// Farhome modifications 2026-11-06: revision-aware legacy mutations.
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {

@@ -7,6 +7,7 @@ const production = !process.env.ROLLUP_WATCH;
 export default {
   input: "src/switch-manager-panel.ts",
   output: {
+    banner: '/*! Farhome modifications 2026-11-06; based on Home Assistant Switch Manager. GPLv3; third-party terms: assets/THIRD_PARTY_NOTICES.txt. */',
     file: "../custom_components/switch_manager/assets/switch_manager_panel.js",
     format: "es",
     inlineDynamicImports: true,
@@ -15,6 +16,6 @@ export default {
   plugins: [
     typescript({ noEmit: false, outDir: "../custom_components/switch_manager/assets" }),
     resolve(),
-    production && terser({ format: { comments: false } }),
+    production && terser({ format: { comments: /@license|@preserve|^!/ } }),
   ],
 };

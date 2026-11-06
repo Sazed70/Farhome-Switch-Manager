@@ -149,6 +149,7 @@ try:
                 page.set_viewport_size({'width': width, 'height': 1000})
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), (theme, width)
                 output = root / '.superpowers/sdd/2026-11-06-farhome-pulsanti'
+                output.mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(output / f'product-{theme}-{width}.png'), full_page=True)
         page.evaluate('window.failRead=true;mount()')
         expect(page.get_by_role('alert')).to_contain_text('Lettura non riuscita')
