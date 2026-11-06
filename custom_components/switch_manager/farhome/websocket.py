@@ -8,6 +8,7 @@ from homeassistant.helpers import device_registry as dr
 from ..const import DOMAIN, CONF_MANAGED_SWITCHES
 from .inventory import async_snapshot
 from .config_service import async_read_config, async_save_config, async_set_enabled, FarhomeError
+from .selector import async_read_selector, async_update_selector
 
 
 async def async_reply(connection, msg, operation):
@@ -60,10 +61,10 @@ async def websocket_get_config(hass, connection, msg):
 
 
 @websocket_api.require_admin
-@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/config/save', vol.Required('config'): dict, vol.Optional('metadata'): vol.Any(dict, None), vol.Optional('expected_revision'): vol.Any(str, None), vol.Optional('quick_actions'): list})
+@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/config/save', vol.Required('config'): dict, vol.Optional('metadata'): vol.Any(dict, None), vol.Optional('expected_revision'): vol.Any(str, None), vol.Optional('quick_actions'): list, vol.Optional('selector_actions'): list})
 @websocket_api.async_response
 async def websocket_save_config(hass, connection, msg):
-    await async_reply(connection, msg, async_save_config(hass, msg['config'], msg.get('metadata'), msg.get('expected_revision'), quick_actions=msg.get('quick_actions')))
+    await async_reply(connection, msg, async_save_config(hass, msg['config'], msg.get('metadata'), msg.get('expected_revision'), quick_actions=msg.get('quick_actions'), selector_actions=msg.get('selector_actions')))
 
 
 @websocket_api.require_admin
@@ -73,9 +74,23 @@ async def websocket_enabled(hass, connection, msg):
     await async_reply(connection, msg, async_set_enabled(hass, msg['config_id'], msg['enabled'], msg['expected_revision'], msg['conflict_check']))
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/selector/get', vol.Required('entity_id'): str, vol.Required('config_id'): str})
+@websocket_api.async_response
+async def websocket_selector_get(hass, connection, msg):
+    await async_reply(connection, msg, async_read_selector(hass, msg['entity_id'], config_id=msg['config_id']))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/selector/update', vol.Required('entity_id'): str, vol.Required('config_id'): str, vol.Required('options'): list, vol.Optional('active'): vol.Any(str, None), vol.Optional('initial'): vol.Any(str, None), vol.Required('expected_revision'): str, vol.Required('dependencies_acknowledged'): bool})
+@websocket_api.async_response
+async def websocket_selector_update(hass, connection, msg):
+    await async_reply(connection, msg, async_update_selector(hass, msg['entity_id'], msg['options'], msg.get('active'), msg.get('initial'), msg['expected_revision'], msg['dependencies_acknowledged'], config_id=msg['config_id']))
+
+
 async def async_setup_websocket(hass):
     if hass.data[DOMAIN].get("farhome_websocket_registered"):
         return
-    for command in (websocket_snapshot, websocket_metadata, websocket_get_config, websocket_save_config, websocket_enabled):
+    for command in (websocket_snapshot, websocket_metadata, websocket_get_config, websocket_save_config, websocket_enabled, websocket_selector_get, websocket_selector_update):
         websocket_api.async_register_command(hass, command)
     hass.data[DOMAIN]["farhome_websocket_registered"] = True

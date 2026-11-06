@@ -11,6 +11,10 @@ export interface QuickAction {
   service_key?: 'action'|'service'; data_present?: boolean;
 }
 export interface QuickPatch {button: number; action: number; value: QuickAction;}
+export type SelectorKind = 'next'|'brightness_up'|'brightness_down';
+export interface SelectorAction {helper_id:string;kind:SelectorKind;step:number;transition:number;mode:ScriptMode;}
+export interface SelectorPatch extends Omit<SelectorAction,'helper_id'> {button:number;action:number;}
+export interface SelectorSnapshot {entity_id:string;options:string[];active:string;initial:string|null;origin:'ui'|'yaml_or_unknown';editable:boolean;readonly_reason:string|null;revision:string;known_references:{type:string;id:string}[];}
 export interface ActionOption {kind: QuickKind; label_key: string;}
 export interface EntityState {entity_id: string; state: string; attributes: Record<string, any>;}
 export type ServiceMap = Record<string, Record<string, {fields?: Record<string, any>; [key:string]: unknown}>>;

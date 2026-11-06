@@ -172,7 +172,7 @@ async def _replace_runtime(hass, config_id, data, blueprint):
         raise FarhomeError('partial_write', 'Configurazione salvata, ma non avviata. È necessario ricaricare e verificarla.') from err
 
 
-async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch=False, quick_actions=None):
+async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch=False, quick_actions=None, selector_actions=None):
     metadata, store, configs = _objects(hass)
     if not isinstance(config, dict):
         raise FarhomeError('validation_error', 'Configurazione non valida.')
@@ -184,6 +184,10 @@ async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch
         _check_revision(hass, config_id, expected_revision)
     else:
         config_id = store.get_available_id()
+    if selector_actions:
+        from .selector import apply_selector_actions
+        effective_binding = binding if binding is not None else metadata.snapshot()['bindings'].get(config_id)
+        await apply_selector_actions(hass, config, effective_binding, selector_actions)
     if quick_actions is not None:
         try:
             apply_quick_actions(hass, config, quick_actions)
@@ -204,10 +208,10 @@ async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch
     return _read(hass, config_id)
 
 
-async def async_save_config(hass, config, metadata, expected_revision, *, fix_mismatch=False, quick_actions=None):
+async def async_save_config(hass, config, metadata, expected_revision, *, fix_mismatch=False, quick_actions=None, selector_actions=None):
     store, _, _ = _objects(hass)
     async with store.config_lock:
-        return await _save_locked(hass, config, metadata, expected_revision, fix_mismatch=fix_mismatch, quick_actions=quick_actions)
+        return await _save_locked(hass, config, metadata, expected_revision, fix_mismatch=fix_mismatch, quick_actions=quick_actions, selector_actions=selector_actions)
 
 
 async def async_set_enabled(hass, config_id, enabled, expected_revision, conflict_check=False):

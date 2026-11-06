@@ -1,4 +1,5 @@
 import type {QuickAction, Domain, QuickKind, ScriptMode, ActionOption, EntityState, ServiceMap, SwitchConfigButtonAction} from './types.js';
+import type {SelectorAction,SelectorKind} from './types.js';
 
 const modes = ['single','restart','queued','parallel'];
 const domains = ['light','fan','switch','scene','script'];
@@ -97,6 +98,37 @@ export function parseQuickAction(action: SwitchConfigButtonAction): QuickAction|
 export function supportsBrightness(entity: EntityState): boolean {
   const modes=entity.attributes.supported_color_modes;
   return Array.isArray(modes)&&modes.some(mode=>['brightness','color_temp','hs','xy','rgb','rgbw','rgbww','white'].includes(mode));
+}
+
+export function buildSelectorAction(helper_id:string,kind:SelectorKind,step=10,transition=.1,mode:ScriptMode='restart'):SwitchConfigButtonAction {
+  if(!/^input_select\.[a-z0-9_]+$/.test(helper_id)||!['next','brightness_up','brightness_down'].includes(kind)||!number(step,Number.MIN_VALUE,100)||!number(transition,0,3600)||!modes.includes(mode))throw new Error('invalid_selector_action');
+  const sequence=kind==='next'?[{action:'input_select.select_next',target:{entity_id:helper_id},data:{cycle:true}}]:[
+    {variables:{farhome_selected_light:`{{ states('${helper_id}') }}`}},
+    {condition:'template',value_template:`{{ farhome_selected_light is string and farhome_selected_light is match('^light[.][a-z0-9_]+$') and farhome_selected_light in (state_attr('${helper_id}', 'options') or []) and has_value(farhome_selected_light) }}`},
+    {action:'light.turn_on',target:{entity_id:'{{ farhome_selected_light }}'},data:{brightness_step_pct:kind==='brightness_up'?step:-step,transition}},
+  ];
+  return {mode,sequence};
+}
+
+export function parseSelectorAction(action:SwitchConfigButtonAction):SelectorAction|null {
+  if(!record(action)||!only(action,['mode','sequence','loop','loop_interval'])||!modes.includes(action.mode)||action.loop===true||!Array.isArray(action.sequence))return null;
+  const sequence=action.sequence as Record<string,any>[];
+  for(const kind of ['next','brightness_up','brightness_down'] as SelectorKind[]){
+    let helper_id:string|undefined,step=10,transition=.1;
+    if(kind==='next')helper_id=sequence[0]?.target?.entity_id;
+    else {
+      helper_id=/^\{\{ states\('(input_select\.[a-z0-9_]+)'\) \}\}$/.exec(sequence[0]?.variables?.farhome_selected_light||'')?.[1];
+      const data=sequence[2]?.data;
+      step=Math.abs(data?.brightness_step_pct);transition=data?.transition;
+    }
+    if(!helper_id)continue;
+    try{const generated=buildSelectorAction(helper_id,kind,step,transition,action.mode as ScriptMode);
+      // Key ordering is irrelevant, unknown keys are not. Conservative comparison.
+      const canonical=(v:any):string=>JSON.stringify(v,(_key,item)=>record(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+      if(canonical(generated.sequence)===canonical(action.sequence))return {helper_id,kind,step,transition,mode:action.mode as ScriptMode};
+    }catch{}
+  }
+  return null;
 }
 
 export function supportedQuickActions(entity: EntityState|undefined, services: ServiceMap): ActionOption[] {
