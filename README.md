@@ -1,3 +1,13 @@
+# Farhome Switch Manager
+
+> **Independent development fork — updated 2026-11-06.** Based on [macpit/Home-Assistant-Switch-Manager](https://github.com/macpit/Home-Assistant-Switch-Manager), originating from [Sian-Lee-SA/Home-Assistant-Switch-Manager](https://github.com/Sian-Lee-SA/Home-Assistant-Switch-Manager). Original copyright: **Copyright (C) 2022 Sian Croser**. Credit remains with the original authors, maintainers and contributors for their respective work.
+>
+> Farhome is maintained separately by [Sazed70](https://github.com/Sazed70). No endorsement by the upstream maintainers, Home Assistant or device vendors is implied. Farhome customization is currently in design: changes made so far are documentation only, with no Farhome application release.
+>
+> Read the [Farhome scope](docs/farhome/README.md), [attribution and collaboration rules](ATTRIBUTION.md), and unchanged [GPLv3 license](LICENSE). The inherited upstream README follows unchanged; its badges, roadmap, installation links and support links describe the upstream project, not a Farhome release. Report Farhome-specific problems in this fork rather than attributing them to upstream.
+
+---
+
 # Home Assistant Switch Manager
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://my.home-assistant.io/redirect/hacs_repository/?owner=macpit&repository=Home-Assistant-Switch-Manager&category=integration)
