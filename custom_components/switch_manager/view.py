@@ -1,3 +1,6 @@
+from hashlib import sha256
+from pathlib import Path
+
 from .const import (
     DOMAIN, 
     CONF_BLUEPRINTS, 
@@ -13,6 +16,8 @@ from homeassistant.components.frontend import async_register_built_in_panel, asy
 from homeassistant.components.http import StaticPathConfig
 
 async def async_setup_view(hass: HomeAssistant):
+    bundle_path = hass.config.path("custom_components/switch_manager/assets/switch_manager_panel.js")
+    bundle_revision = await hass.async_add_executor_job(lambda: sha256(Path(bundle_path).read_bytes()).hexdigest()[:16])
     await _async_register_static_paths(hass, [
         StaticPathConfig(
             PANEL_URL, 
@@ -30,14 +35,14 @@ async def async_setup_view(hass: HomeAssistant):
 
     async_register_built_in_panel(hass,
         component_name="custom",
-        sidebar_title=NAME,
+        sidebar_title="Pulsanti",
         sidebar_icon="mdi:light-switch-off",
         frontend_url_path=PANEL_URL_PATH,
         require_admin=True,
         config={
             "_panel_custom": {
                 "name": "switch-manager-panel",
-                "module_url": f"{PANEL_URL}?{VERSION}",
+                "module_url": f"{PANEL_URL}?{VERSION}&farhome={bundle_revision}",
                 "embed_iframe": False
             },
             "version": VERSION

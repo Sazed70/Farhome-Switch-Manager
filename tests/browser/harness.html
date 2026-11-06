@@ -1,0 +1,37 @@
+<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farhome component test harness</title>
+<style>body{margin:0;font:16px Roboto,Arial,sans-serif;--primary-color:#007a92;--primary-text-color:#202124;--secondary-text-color:#59636b;--primary-background-color:#f5f7f8;--card-background-color:#fff;--divider-color:#d6dce0;background:var(--primary-background-color);color:var(--primary-text-color)}body.dark{--primary-color:#6fd4e4;--primary-text-color:#e7edf0;--secondary-text-color:#b4bec5;--primary-background-color:#14191d;--card-background-color:#20272c;--divider-color:#43515a;color-scheme:dark}</style>
+<script type="module">
+import '../../custom_components/switch_manager/assets/switch_manager_panel.js';
+const blueprint={id:'synthetic',name:'Synthetic knob',service:'Zigbee2MQTT',has_image:false,buttons:[{actions:[{title:'Click'},{title:'Rotazione oraria'},{title:'Doppio click'},{title:'Pressione prolungata'}]},{actions:[{title:'Secondo tasto'}]}]};
+const empty=()=>({mode:'restart',sequence:[],loop:false,loop_interval:250});
+const feedback={mode:'queued',sequence:[{action:'light.toggle',target:{entity_id:'light.desk'}},{delay:{milliseconds:500}},{action:'light.toggle',target:{entity_id:'light.desk'}}],loop:false,loop_interval:250};
+const config={id:'1',name:'Studio',enabled:true,identifier:'synthetic/studio/action',blueprint,rotate:0,variables:{},valid_blueprint:true,is_mismatch:false,buttons:[{actions:[empty(),empty(),feedback,empty()]},{actions:[empty()]}]};
+const controller=(id,name,area,configs,model='ZG-101ZD',management='farhome')=>({device_id:id,name,area_id:area,manufacturer:'HOBEIAN',model,config_ids:configs,management,compatibility:'verified',external_automations:[],image:{url:'/assets/switch_manager/missing-image.png',source_url:'https://www.zigbee2mqtt.io/devices/ZG-101ZD.html',source_label:'Zigbee2MQTT'}});
+window.fixture={areas:[{id:'studio',name:'Studio'},{id:'empty',name:'Vuota'}],controllers:[controller('knob','Scrivania', 'studio',['1']),controller('many','Più configurazioni','studio',['2','3']),controller('none','Senza stanza',null,[]),controller('external','Controller esterno','studio',['4'],'External','external'),controller('long','<img src=x onerror="window.xss=true"> '+ 'Nome molto lungo '.repeat(8),'studio',[])],unassociated_configs:[{config_id:'5',name:'Da collegare',reason:'ambiguous'}],available_devices:[{id:'manual',name:'Controller manuale',model:'Unknown',area_id:'studio'}],revision:'inventory-1',metadata_revision:'meta-1',metadata:{version:1,controllers:{},bindings:{'1':{device_id:'knob',verified:true,conflicts_checked:true,selector_helper:null}}},warnings:[]};
+window.configs={'1':config,'2':{...structuredClone(config),id:'2',name:'A'},'3':{...structuredClone(config),id:'3',name:'B'},'4':{...structuredClone(config),id:'4',enabled:false},'5':{...structuredClone(config),id:'5',enabled:false}};
+window.calls=[];window.failRead=false;window.failSave=false;window.delaySave=false;window.counter=1;
+window.helper={entity_id:'input_select.lights',options:['light.desk','light.ceiling'],active:'light.desk',initial:'light.desk',origin:'ui',editable:true,readonly_reason:null,revision:'helper-1',known_references:[{type:'config',id:'1'}]};
+window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',state:'on',attributes:{friendly_name:'Scrivania',supported_color_modes:['brightness']}},'light.ceiling':{entity_id:'light.ceiling',state:'unavailable',attributes:{friendly_name:'Soffitto',supported_color_modes:['brightness']}},'light.extra':{entity_id:'light.extra',state:'off',attributes:{friendly_name:'Extra',supported_color_modes:['brightness']}},'fan.fixed':{entity_id:'fan.fixed',state:'off',attributes:{friendly_name:'Ventilatore fisso',supported_features:48}},'fan.variable':{entity_id:'fan.variable',state:'on',attributes:{friendly_name:'Ventilatore regolabile',supported_features:49}},'input_select.lights':{entity_id:'input_select.lights',state:'light.desk',attributes:{options:['light.desk','light.ceiling']}}},services:{light:{turn_on:{},turn_off:{},toggle:{}},fan:{turn_on:{},turn_off:{},toggle:{},increase_speed:{},decrease_speed:{}},switch:{turn_on:{},turn_off:{},toggle:{}},scene:{turn_on:{}},script:{turn_on:{}}},callWS:async msg=>{
+  calls.push(structuredClone(msg));
+  if(msg.type==='call_service')throw Error('Unexpected load actuation');
+  if(msg.type.endsWith('/snapshot')){if(failRead)throw {code:'read_error',message:'Lettura non riuscita'};return structuredClone(fixture);}
+  if(msg.type==='switch_manager/blueprints')return {blueprints:{synthetic:blueprint},blueprint};
+  if(msg.type.endsWith('/config/get'))return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:structuredClone(fixture.metadata.bindings[msg.config_id]||{device_id:fixture.controllers.find(x=>x.config_ids.includes(msg.config_id))?.device_id,verified:true}),revision:'config-'+counter};
+  if(msg.type.endsWith('/config/save')){
+    if(delaySave)await new Promise(resolve=>window.releaseSave=resolve);
+    if(failSave)throw {code:failSave===true?'conflict':failSave,message:'Configurazione modificata altrove. Ricarica prima di salvare.'};
+    const id=msg.config.id||String(++counter+10);configs[id]={...structuredClone(msg.config),id,blueprint};counter++;
+    if(msg.metadata)fixture.metadata.bindings[id]=structuredClone(msg.metadata);
+    const device=fixture.controllers.find(x=>x.device_id===msg.metadata?.device_id);if(device&&!device.config_ids.includes(id))device.config_ids.push(id);
+    return {config_id:id,config:structuredClone(configs[id]),metadata:structuredClone(msg.metadata),revision:'config-'+counter};
+  }
+  if(msg.type.endsWith('/config/enabled')){configs[msg.config_id].enabled=msg.enabled;return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:fixture.metadata.bindings[msg.config_id],revision:'config-'+(++counter)};}
+  if(msg.type.endsWith('/metadata/save')){for(const [ns,entries]of Object.entries(msg.patch))for(const [key,value]of Object.entries(entries))fixture.metadata[ns][key]=value;fixture.metadata_revision='meta-'+(++counter);if(msg.patch.controllers?.manual&&!fixture.controllers.some(x=>x.device_id==='manual'))fixture.controllers.push(controller('manual','Controller manuale','studio',[],'Unknown','unknown'));if(msg.patch.bindings)fixture.unassociated_configs=[];return {metadata:structuredClone(fixture.metadata),revision:fixture.metadata_revision};}
+  if(msg.type.endsWith('/selector/get'))return structuredClone(helper);
+  if(msg.type.endsWith('/selector/update')){if(window.helperFailure)throw {code:helperFailure,message:'Helper modificato: ricarica.'};helper={...helper,options:msg.options,active:msg.active||helper.active,initial:msg.initial||helper.initial,revision:'helper-'+(++counter)};return structuredClone(helper);}
+  throw Error('Unhandled test transport: '+msg.type);
+},connection:{subscribeEvents:async()=>()=>{},subscribeMessage:async()=>()=>{}},themes:{darkMode:false},loadFragmentTranslation(){},loadBackendTranslation(){},localize:key=>key};
+window.mount=async(path='/rooms/studio')=>{document.querySelector('farhome-panel')?.remove();const panel=document.createElement('farhome-panel');panel.hass=testHass;panel.route={path};document.body.append(panel);window.panel=panel;await panel.updateComplete;};
+await mount();window.ready=true;
+</script></html>

@@ -5,6 +5,7 @@ import type { HomeAssistant, Panel, Route } from "./types";
 
 import "./switch-manager-index";
 import "./switch-manager-switch-editor";
+import "./farhome/panel.js";
 
 // HA runtime components the panel + action editor depend on. loadHaComponents()
 // drives HA's config/automation route loader, which transitively registers the
@@ -36,6 +37,8 @@ export class SwitchManagerPanel extends LitElement {
 
   @property({ attribute: false })
   set route(route: Route) {
+    const farhome = this.renderRoot?.querySelector('farhome-panel') as import('./farhome/panel.js').FarhomePanel|null;
+    if (/^\/(legacy|new|edit)(\/|$)/.test(route.path) && farhome && !farhome.allowRoute(route.path)) return;
     this._route = route;
     const parts = route.path.split("/");
     if (parts[1] === "new") {
@@ -65,6 +68,9 @@ export class SwitchManagerPanel extends LitElement {
           .params=${this._params}
         ></switch-manager-switch-editor>
       `;
+    }
+    if (!this._route?.path.startsWith('/legacy')) {
+      return html`<farhome-panel .hass=${this.hass} .narrow=${this.narrow} .route=${this._route}></farhome-panel>`;
     }
     return html`
       <switch-manager-index
