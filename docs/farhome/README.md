@@ -30,3 +30,7 @@ Definire e rivedere l'interfaccia prima dell'implementazione. Preparare un'antep
 L'integrazione conserva per ora il dominio upstream `switch_manager`: installazione originale e fork non sono due integrazioni indipendenti nella stessa istanza. Il pannello e i comandi WebSocket upstream esaminati richiedono un amministratore; accesso per altri utenti da definire solo se richiesto.
 
 Ogni installazione o modifica all'istanza Home Assistant richiede una decisione separata. Creare il fork non modifica l'impianto domotico.
+
+## Attribution and collaboration
+
+Follow [ATTRIBUTION.md](../../ATTRIBUTION.md) for provenance, license notices, dated modifications, releases and upstream contributions. The default branch is `farhome`; `master` remains the upstream reference. Farhome-specific changes must remain clearly identified as an independent fork.
