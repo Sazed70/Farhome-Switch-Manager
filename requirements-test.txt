@@ -1,0 +1,5 @@
+# Runtime/integration requirements matching Home Assistant Core 2026.11.0.
+# Run under Linux with Python >=3.14.2. unittest is part of Python.
+homeassistant==2026.11.0
+paho-mqtt==2.1.0
+home-assistant-frontend==20261028.4

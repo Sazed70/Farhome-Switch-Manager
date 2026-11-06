@@ -15,6 +15,8 @@ from .view import async_setup_view, async_remove_view, async_bind_blueprint_imag
 from . import models
 from .schema import BLUEPRINT_MQTT_SCHEMA, BLUEPRINT_EVENT_SCHEMA, SERVICE_SET_VARIABLES_SCHEMA
 from .connections import async_setup_connections
+from .farhome import async_setup_farhome
+from .farhome.websocket import async_setup_websocket as async_setup_farhome_websocket
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config import format_schema_error
 from homeassistant.helpers import issue_registry as ir
@@ -61,6 +63,8 @@ async def async_setup( hass: HomeAssistant, config: ConfigType ):
     await _init_blueprints(hass)
     await _init_switch_configs(hass)
 
+    await async_setup_farhome(hass)
+
     hass.services.async_register( DOMAIN, 'reload', reload_all )
     hass.services.async_register( DOMAIN, 'set_variables', switch_merge_variables, SERVICE_SET_VARIABLES_SCHEMA )
 
@@ -70,6 +74,7 @@ async def async_setup( hass: HomeAssistant, config: ConfigType ):
 async def async_setup_entry( hass, config_entry ):
     await async_setup_view(hass)
     await async_setup_connections( hass )
+    await async_setup_farhome_websocket(hass)
 
     return True
 

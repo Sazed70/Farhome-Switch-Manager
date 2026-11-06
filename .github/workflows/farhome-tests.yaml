@@ -1,0 +1,34 @@
+name: Farhome tests
+on:
+  push:
+    branches: [farhome, 'work/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14.2'
+          cache: pip
+      - run: python -m pip install -r requirements-test.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q custom_components/switch_manager
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
