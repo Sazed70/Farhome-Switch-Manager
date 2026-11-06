@@ -42,6 +42,8 @@ async def websocket_metadata(hass, connection, msg):
             for key, value in msg["patch"].get("bindings", {}).items():
                 if value is not None and (key not in hass.data[DOMAIN][CONF_MANAGED_SWITCHES] or registry.async_get(value["device_id"]) is None):
                     raise ValueError("unknown_config_or_device")
+                if value is not None and value.get('selector_helper') != store.snapshot()['bindings'].get(key, {}).get('selector_helper'):
+                    raise ValueError('Salva il collegamento helper insieme alla configurazione del controller.')
             await store.async_update(msg["expected_revision"], msg["patch"])
     except ValueError as err:
         code = "conflict" if str(err) == "conflict" else "validation_error"

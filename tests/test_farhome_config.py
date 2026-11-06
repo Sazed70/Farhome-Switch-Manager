@@ -73,6 +73,17 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(b["config"]["enabled"])
         self.assertEqual(len(self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES]), 2)
 
+    async def test_linking_helper_requires_active_migrated_controller(self):
+        self.hass.states.async_set('input_select.synthetic', 'light.a', {'options': ['light.a']})
+        initial = await self.create({'device_id': 'device', 'verified': True})
+        binding = {**initial['metadata'], 'selector_helper': 'input_select.synthetic'}
+        with self.assertRaisesRegex(ValueError, 'activation_blocked'):
+            await async_save_config(self.hass, initial['config'], binding, initial['revision'])
+        active = await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], True)
+        linked = await async_save_config(self.hass, active['config'], {**active['metadata'], 'selector_helper': 'input_select.synthetic'}, active['revision'])
+        self.assertFalse(linked['config']['enabled'])
+        self.assertEqual(linked['metadata']['selector_helper'], 'input_select.synthetic')
+
     async def test_stale_revision_rejected_after_legacy_save(self):
         initial = await self.create()
         handlers = await self.legacy_handlers()
