@@ -63,3 +63,16 @@ test('multiple entity, area targets and template expressions stay advanced',()=>
     assert.equal(parseQuickAction({mode:'single',sequence:[{action:'light.turn_on',target}]}),null);
   }
 });
+test('selector captures current light at the event and preserves independent advanced gestures',async()=>{
+  const {buildSelectorAction,parseSelectorAction}=await import('../.test-build/farhome/actions.js');
+  const feedback={mode:'restart',sequence:[{action:'light.toggle',target:{entity_id:'light.a'}},{delay:{milliseconds:500}},{action:'light.toggle',target:{entity_id:'light.a'}}]};
+  const original=structuredClone(feedback);
+  const down=buildSelectorAction('input_select.renamed','brightness_down',10,.1);
+  assert.equal(down.sequence.at(-1).data.brightness_step_pct,-10);
+  assert.equal(down.sequence.at(-1).data.transition,.1);
+  assert.match(down.sequence[0].variables.farhome_selected_light,/states\('input_select.renamed'\)/);
+  assert.deepEqual(parseSelectorAction(down),{helper_id:'input_select.renamed',kind:'brightness_down',step:10,transition:.1,mode:'restart'});
+  assert.equal(parseSelectorAction(feedback),null);
+  assert.deepEqual(feedback,original);
+  assert.throws(()=>buildSelectorAction('input_select.bad\'id','next',10,.1));
+});
