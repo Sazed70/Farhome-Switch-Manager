@@ -6,7 +6,7 @@ Farhome builds on [macpit/Home-Assistant-Switch-Manager](https://github.com/macp
 
 ## Project status
 
-**Design stage — updated 2026-11-06.** Farhome changes currently cover documentation only. The planned interface has not been implemented, and there is no Farhome application release or validated installation procedure yet.
+**Design approved — updated 2026-11-06.** The room-based panel design, including device thumbnails, has been approved. An implementation plan is ready for execution-method selection. Farhome repository changes currently cover documentation only. The planned interface has not been implemented, and there is no Farhome application release or validated installation procedure yet.
 
 The inherited application code and device blueprints remain unchanged from the [initial upstream revision](https://github.com/macpit/Home-Assistant-Switch-Manager/tree/73c7af5e2e23132f6c2e0489d99016babf8741d3). Existing upstream functionality belongs to that project; it is not a Farhome contribution.
 
@@ -25,7 +25,8 @@ Cycling through a mixed list of different target types, such as lights and fans 
 
 - **`farhome`** is the default branch for Farhome documentation and future changes.
 - **`master`** preserves the upstream reference for synchronization and comparison.
-- [Dedicated panel design proposal — awaiting approval](docs/superpowers/specs/2026-11-06-farhome-pulsanti-design.md)
+- [Approved dedicated panel design](docs/superpowers/specs/2026-11-06-farhome-pulsanti-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-11-06-farhome-pulsanti.md)
 - [Attribution, licensing and collaboration rules](ATTRIBUTION.md)
 - [Original upstream documentation at the fork's starting revision](https://github.com/macpit/Home-Assistant-Switch-Manager/blob/73c7af5e2e23132f6c2e0489d99016babf8741d3/README.md)
 - [Current upstream project](https://github.com/macpit/Home-Assistant-Switch-Manager)
