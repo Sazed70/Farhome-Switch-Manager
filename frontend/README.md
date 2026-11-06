@@ -43,4 +43,22 @@ npm run watch      # dev build with watch
 
 The built file is output to `../custom_components/switch_manager/assets/switch_manager_panel.js`
 and is committed to the repo (HA loads it directly). The `module_url` carries the
-`manifest.json` version as a cache-buster, so bump the version when shipping a new build.
+`manifest.json` version and a content hash of the bundle as cache-busters.
+
+## Farhome Pulsanti panel
+
+The default route loads the Lit components in `src/farhome/`. Rooms use
+`/switch_manager/rooms/{area_id}`; `_no_area` and `_unassociated` are reserved
+views. Device details add `/device/{device_id}`. The inherited index remains at
+`/switch_manager/legacy`, with its original `/new/{blueprint}` and `/edit/{id}` routes.
+
+All new transport goes through administrative, revision-checked WebSocket APIs.
+The editor never calls load services. Quick forms replace only explicitly edited
+gestures; unknown sequences stay in HA's runtime action editor. Metadata and native
+helper edits are separate operations. The bundle includes no frozen HA editor.
+
+Run `npm test`, `npx tsc --noEmit`, `npm run build`, then from the repository root
+`python tests/browser/farhome_panel.py` and `python tests/browser/legacy_revision.py`.
+Browser fixtures simulate only HA data/transport; they import the actual bundle.
+Chrome Beta is auto-detected on Windows; CI can use Playwright Chromium or set
+`FARHOME_BROWSER`. Screenshots are scratch evidence, not application assets.
