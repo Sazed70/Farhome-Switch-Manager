@@ -116,6 +116,15 @@ def _binding_patch(hass, config_id, binding):
         raise FarhomeError('validation_error', str(err)) from err
     if dr.async_get(hass).async_get(binding['device_id']) is None:
         raise FarhomeError('validation_error', 'Il dispositivo associato non esiste più.')
+    previous = metadata.snapshot()['bindings'].get(str(config_id), {})
+    helper = binding.get('selector_helper')
+    if helper and helper != previous.get('selector_helper'):
+        current = hass.data[DOMAIN][CONF_MANAGED_SWITCHES].get(str(config_id))
+        controller = metadata.snapshot()['controllers'].get(binding['device_id'], {})
+        if not current or not current.enabled or previous.get('device_id') != binding['device_id'] or not previous.get('verified') or not previous.get('conflicts_checked') or controller.get('management') == 'external':
+            raise FarhomeError('activation_blocked', 'Collegare un helper richiede un controller Farhome attivo e verificato.')
+        if not helper.startswith('input_select.') or hass.states.get(helper) is None:
+            raise FarhomeError('validation_error', 'Helper non disponibile.')
     return {'bindings': {str(config_id): deepcopy(binding)}}
 
 

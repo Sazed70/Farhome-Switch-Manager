@@ -21,7 +21,7 @@ window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',stat
   if(msg.type.endsWith('/config/save')){
     if(delaySave)await new Promise(resolve=>window.releaseSave=resolve);
     if(failSave)throw {code:failSave===true?'conflict':failSave,message:'Configurazione modificata altrove. Ricarica prima di salvare.'};
-    const id=msg.config.id||String(++counter+10);configs[id]={...structuredClone(msg.config),id,blueprint};counter++;
+    const id=msg.config.id||String(++counter+10);const helperChanged=msg.metadata?.selector_helper!==fixture.metadata.bindings[id]?.selector_helper;configs[id]={...structuredClone(msg.config),id,blueprint,enabled:helperChanged?false:msg.config.enabled};counter++;
     if(msg.metadata)fixture.metadata.bindings[id]=structuredClone(msg.metadata);
     const device=fixture.controllers.find(x=>x.device_id===msg.metadata?.device_id);if(device&&!device.config_ids.includes(id))device.config_ids.push(id);
     return {config_id:id,config:structuredClone(configs[id]),metadata:structuredClone(msg.metadata),revision:'config-'+counter};
