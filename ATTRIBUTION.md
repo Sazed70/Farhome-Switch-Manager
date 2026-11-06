@@ -4,7 +4,7 @@ Last updated: 2026-11-06.
 
 ## Provenance and credit
 
-Farhome Switch Manager is an independent development fork of [macpit/Home-Assistant-Switch-Manager](https://github.com/macpit/Home-Assistant-Switch-Manager). The original project is [Sian-Lee-SA/Home-Assistant-Switch-Manager](https://github.com/Sian-Lee-SA/Home-Assistant-Switch-Manager). The inherited LICENSE begins with **Copyright (C) 2022 Sian Croser**. The upstream README records the handover to macpit; preserve that acknowledgment and the credit due to all contributors.
+Farhome Switch Manager is an independent development fork of [macpit/Home-Assistant-Switch-Manager](https://github.com/macpit/Home-Assistant-Switch-Manager). The original project is [Sian-Lee-SA/Home-Assistant-Switch-Manager](https://github.com/Sian-Lee-SA/Home-Assistant-Switch-Manager). The inherited LICENSE begins with **Copyright (C) 2022 Sian Croser**. The [upstream README at the fork's starting revision](https://github.com/macpit/Home-Assistant-Switch-Manager/blob/73c7af5e2e23132f6c2e0489d99016babf8741d3/README.md) records the handover to macpit; preserve that acknowledgment and the credit due to all contributors. The main README is adapted to describe Farhome, with visible origin and acknowledgments; the original documentation remains available at that pinned link and in the `master` branch.
 
 The initial fork uses upstream commit `73c7af5e2e23132f6c2e0489d99016babf8741d3`. Keep its Git history, authorship and notices. Attribute only actual Farhome changes to Farhome contributors. Sazed70 maintains this fork independently; names and links do not imply upstream or vendor endorsement.
 
