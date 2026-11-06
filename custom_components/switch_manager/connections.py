@@ -1,3 +1,4 @@
+# Farhome modifications 2026-11-06: coordinate writes and revisions with the new panel.
 from __future__ import annotations
 
 from typing import Any

@@ -4,7 +4,7 @@ Fork pubblico di [macpit/Home-Assistant-Switch-Manager](https://github.com/macpi
 
 ## Stato
 
-Repository inizializzato il 6 novembre 2026. Progetto del pannello Farhome approvato dopo l'aggiunta delle miniature; piano di implementazione pronto per la scelta del metodo di esecuzione. Nessuna funzionalità personalizzata implementata e nessuna installazione eseguita su Home Assistant. Base iniziale: `73c7af5e2e23132f6c2e0489d99016babf8741d3` dell'upstream.
+Pannello sviluppato il 6 novembre 2026 con esecuzione diretta nella chat, sul ramo `work/farhome-panel`, a partire dalla progettazione approvata. Inventario, stanze, miniature, gesti multidominio e selettore persistente sono implementati e verificati con dati sintetici. Nessuna installazione o migrazione eseguita su Home Assistant. Base iniziale: `73c7af5e2e23132f6c2e0489d99016babf8741d3` dell'upstream. [Prove e limiti](testing-and-migration.md).
 
 ## Organizzazione
 
@@ -26,7 +26,7 @@ Repository inizializzato il 6 novembre 2026. Progetto del pannello Farhome appro
 
 ## Vincoli e prossimi passi
 
-Scelto dall'utente un pannello dedicato dentro Home Assistant. La [proposta di progetto](../superpowers/specs/2026-11-06-farhome-pulsanti-design.md) descrive schermate, gesti, inventario, selettore e salvataggio; è stata approvata dall'utente. Il [piano di implementazione](../superpowers/plans/2026-11-06-farhome-pulsanti.md) definisce attività e verifiche; resta da scegliere il metodo di esecuzione prima di iniziare il codice. L'anteprima separata usa dati dimostrativi e non è collegata a Home Assistant. Verificare i blueprint dei dispositivi e ricostruire le dipendenze delle associazioni esistenti prima di migrare.
+Scelto dall'utente un pannello dedicato dentro Home Assistant. La [proposta di progetto](../superpowers/specs/2026-11-06-farhome-pulsanti-design.md) è stata approvata; il [piano](../superpowers/plans/2026-11-06-farhome-pulsanti.md) è stato eseguito nel checkout isolato. Il collaudo automatico carica gli stessi componenti del prodotto, con risposte HA simulate. Prima di qualsiasi migrazione reale restano da verificare blueprint, eventi e dipendenze di un singolo controller autorizzato.
 
 L'integrazione conserva per ora il dominio upstream `switch_manager`: installazione originale e fork non sono due integrazioni indipendenti nella stessa istanza. Il pannello e i comandi WebSocket upstream esaminati richiedono un amministratore; accesso per altri utenti da definire solo se richiesto.
 

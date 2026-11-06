@@ -1,3 +1,4 @@
+# Farhome modifications 2026-11-06: load separate metadata and administrative APIs.
 from __future__ import annotations
 
 import voluptuous as vol

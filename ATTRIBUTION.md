@@ -27,4 +27,24 @@ Useful, general improvements may be proposed upstream when appropriate. Contacti
 
 ## Current status
 
-As of 2026-11-06, Farhome has made documentation changes only. No application code, bundled assets or LICENSE have been changed. No exhaustive dependency or asset-rights audit has been performed; inspect any material that a future change introduces or redistributes. No Farhome release or Home Assistant installation has been made.
+On 2026-11-06 Farhome added the room-based Pulsanti panel, controller inventory,
+separate metadata, revision-checked administrative APIs, quick gesture forms and
+persistent native input_select editing on `work/farhome-panel`. Existing editor
+mutations now share the revision/write coordinator. Changed inherited source files
+carry dated notices; source, lockfile and generated bundle are versioned together.
+The GPLv3 LICENSE, original copyright, Git history, device blueprints and upstream
+event/script engine are preserved. No Farhome release or HA installation was made.
+
+The frontend continues to bundle Lit under BSD-3-Clause and TypeScript helpers
+under their permissive terms; the inherited runtime-component loader acknowledges
+its MIT-licensed adaptation from KipK. Full terms accompany the integration in
+[THIRD_PARTY_NOTICES.txt](custom_components/switch_manager/assets/THIRD_PARTY_NOTICES.txt).
+The minifier preserves legal comments. Build-only dependencies remain subject to
+their package licenses; they are not included in the runtime bundle.
+
+Device images are remote references to the exact Zigbee2MQTT model catalogue or
+to already installed blueprint assets. Each displayed image has a source link.
+No new product photograph is copied into this fork. Custom HTTPS images may be
+referenced; local Zigbee2MQTT `device_icons` paths currently fall back to an icon.
+Image availability or attribution does not establish a right to redistribute it.
+No exhaustive historical asset-rights audit is claimed.

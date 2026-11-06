@@ -1,3 +1,4 @@
+// Farhome modifications 2026-11-06: revision-aware saves and draft preservation.
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state, query } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";

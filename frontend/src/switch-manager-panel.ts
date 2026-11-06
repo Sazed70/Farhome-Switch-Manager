@@ -1,3 +1,4 @@
+// Farhome modifications 2026-11-06: room routing and unsaved-draft guard.
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { loadHaComponents } from "./load-ha-components";
