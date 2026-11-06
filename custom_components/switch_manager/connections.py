@@ -14,6 +14,8 @@ from .schema import SWITCH_MANAGER_CONFIG_SCHEMA
 from .helpers import _get_blueprint, _get_switch_config, _remove_switch_config, _set_switch_config
 from .const import DOMAIN, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, CONF_STORE
 from .models import ManagedSwitchConfig, reconcile_buttons_with_blueprint, async_discover_zigbee2mqtt_instances
+from .farhome.config_service import async_read_config, async_save_config, async_set_enabled, async_delete_config, async_duplicate_config
+from .farhome.websocket import async_reply
 
 async def async_setup_connections( hass ):
   
@@ -88,11 +90,11 @@ async def async_setup_connections( hass ):
         connection: websocket_api.ActiveConnection,
         msg: dict[str, Any],
     ) -> None:
-        data = ({ "config":_get_switch_config(hass, msg['config_id'] ) } 
-                if msg.get('config_id')
-                else { "configs": hass.data[DOMAIN].get(CONF_MANAGED_SWITCHES) })
-
-        connection.send_result( msg["id"], data )
+        if msg.get('config_id'):
+            await async_reply(connection, msg, async_read_config(hass, msg['config_id']))
+        else:
+            snapshots = {key: await async_read_config(hass, key) for key in list(hass.data[DOMAIN][CONF_MANAGED_SWITCHES])}
+            connection.send_result(msg['id'], {'configs': {key: value['config'] for key, value in snapshots.items()}, 'revisions': {key: value['revision'] for key, value in snapshots.items()}})
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({
@@ -122,7 +124,8 @@ async def async_setup_connections( hass ):
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({
-        vol.Required("type"): "switch_manager/config/save", 
+        vol.Required("type"): "switch_manager/config/save",
+        vol.Optional('expected_revision'): vol.Any(str, None),
         vol.Required('config'): SWITCH_MANAGER_CONFIG_SCHEMA,
         vol.Optional('fix_mismatch', default=False): bool
     })
@@ -132,49 +135,18 @@ async def async_setup_connections( hass ):
         connection: websocket_api.ActiveConnection,
         msg: dict[str, Any],
     ) -> None:
-        config: ManagedSwitchConfig
-        store = hass.data[DOMAIN][CONF_STORE]
-
-        if msg['config'].get('id'):
-            config = _get_switch_config( hass, msg['config'].get('id') )
-            if msg['fix_mismatch']:
-                if not config.valid_blueprint:
-                    connection.send_error( 
-                        msg['id'], 
-                        'blueprint_not_loaded', 
-                        f"Blueprint {config.blueprint} is not loaded, check the logs" 
-                    )
-                    return
-                # The panel sends the config as it is stored, so the buttons still carry
-                # the layout of the blueprint they were created with. Reshaping them here
-                # keeps the fix working no matter which panel version asked for it.
-                msg['config']['buttons'] = reconcile_buttons_with_blueprint( 
-                    config.blueprint, 
-                    msg['config'].get('buttons') 
-                )
-                config.setBlueprint( config.blueprint, msg['config']['buttons'] )
-                ir.async_delete_issue(hass, DOMAIN, f"switch_{config.id}_mismatch")
-            config.update( msg['config'] )
-            await config.start()
-        else:
-            config = ManagedSwitchConfig( 
-                hass, 
-                _get_blueprint( hass, msg['config']['blueprint'] ), 
-                store.get_available_id(), 
-                msg['config'] 
-            )
-            await _set_switch_config( hass, config )
-
-        await store.set_managed_switch( config )    
-        
-        connection.send_result( msg['id'], {
-            "config_id": config.id,
-            "config": config
-        })
+        async def save():
+            result = await async_save_config(hass, msg['config'], None, msg.get('expected_revision'), fix_mismatch=msg.get('fix_mismatch', False))
+            if msg.get('fix_mismatch'):
+                ir.async_delete_issue(hass, DOMAIN, f"switch_{result['config_id']}_mismatch")
+            return result
+        await async_reply(connection, msg, save())
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({
-        vol.Required("type"): "switch_manager/config/enabled", 
+        vol.Required("type"): "switch_manager/config/enabled",
+        vol.Optional('expected_revision'): vol.Any(str, None),
+        vol.Optional('conflict_check', default=False): bool,
         vol.Required("config_id"): cv.string,
         vol.Required("enabled"): bool
     })
@@ -184,22 +156,15 @@ async def async_setup_connections( hass ):
         connection: websocket_api.ActiveConnection,
         msg: dict[str, Any],
     ) -> None:
-        store = hass.data[DOMAIN][CONF_STORE]
-
-        config = _get_switch_config( hass, msg['config_id'] )
-        config.setEnabled( msg['enabled'] )
-        await config.start()
-
-        await store.set_managed_switch( config )
-
-        connection.send_result(msg['id'], {
-            "switch_id": config.id,
-            "enabled": msg['enabled']
-        })
+        async def toggle():
+            result = await async_set_enabled(hass, msg['config_id'], msg['enabled'], msg.get('expected_revision'), msg.get('conflict_check', False))
+            return {**result, 'switch_id': result['config_id'], 'enabled': result['config']['enabled']}
+        await async_reply(connection, msg, toggle())
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({
-        vol.Required("type"): "switch_manager/config/delete", 
+        vol.Required("type"): "switch_manager/config/delete",
+        vol.Optional('expected_revision'): vol.Any(str, None),
         vol.Optional("config_id"): cv.string
     })
     @websocket_api.async_response
@@ -208,20 +173,16 @@ async def async_setup_connections( hass ):
         connection: websocket_api.ActiveConnection,
         msg: dict[str, Any],
     ) -> None:
-        store = hass.data[DOMAIN][CONF_STORE]
-
-        await _remove_switch_config( hass, msg['config_id'] )    
-        await store.delete_managed_switch( msg['config_id'] )
-
-        ir.async_delete_issue(hass, DOMAIN, f"switch_{msg['config_id']}_mismatch")
-
-        connection.send_result( msg['id'], {
-            "deleted": msg['config_id']
-        })
+        async def delete():
+            result = await async_delete_config(hass, msg['config_id'], msg.get('expected_revision'))
+            ir.async_delete_issue(hass, DOMAIN, f"switch_{msg['config_id']}_mismatch")
+            return result
+        await async_reply(connection, msg, delete())
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({
         vol.Required("type"): "switch_manager/config/duplicate",
+        vol.Optional('expected_revision'): vol.Any(str, None),
         vol.Required("config_id"): cv.string
     })
     @websocket_api.async_response
@@ -230,35 +191,7 @@ async def async_setup_connections( hass ):
         connection: websocket_api.ActiveConnection,
         msg: dict[str, Any],
     ) -> None:
-        store = hass.data[DOMAIN][CONF_STORE]
-        source = _get_switch_config(hass, msg['config_id'])
-
-        # Serialize buttons to plain dicts
-        buttons = []
-        for button in source.buttons:
-            actions = [action.as_dict() for action in button.actions]
-            buttons.append({'actions': actions})
-
-        config_data = {
-            'name': f"{source.name} (Copy)",
-            'identifier': '',
-            'blueprint': source.blueprint.id if source.valid_blueprint else source.blueprint,
-            'enabled': True,
-            'variables': dict(source.variables) if source.variables else None,
-            'rotate': source.rotate,
-            'buttons': buttons,
-        }
-
-        blueprint = _get_blueprint(hass, config_data['blueprint'])
-        new_config = ManagedSwitchConfig(
-            hass, blueprint, store.get_available_id(), config_data
-        )
-        await _set_switch_config(hass, new_config)
-        await store.set_managed_switch(new_config)
-
-        connection.send_result(msg['id'], {
-            "config_id": new_config.id
-        })
+        await async_reply(connection, msg, async_duplicate_config(hass, msg['config_id'], msg.get('expected_revision')))
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({

@@ -117,11 +117,14 @@ export interface BlueprintsResponse {
 export interface ConfigsResponse {
   configs: Record<string, SwitchConfig>;
   config?: SwitchConfig;
+  revision?: string;
+  revisions?: Record<string, string>;
 }
 
 export interface SaveConfigResponse {
   config_id: string;
   config: SwitchConfig;
+  revision: string;
 }
 
 export interface CopyFromResponse {
