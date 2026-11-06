@@ -25,7 +25,7 @@ Repository inizializzato il 6 novembre 2026. Interfaccia Farhome in progettazion
 
 ## Vincoli e prossimi passi
 
-Definire e rivedere l'interfaccia prima dell'implementazione. Preparare un'anteprima separata per valutare navigazione per stanza, elenco per modello ed editor dei gesti. Verificare i blueprint dei dispositivi e ricostruire le dipendenze delle associazioni esistenti prima di migrare.
+Scelto dall'utente un pannello dedicato dentro Home Assistant. La [proposta di progetto](../superpowers/specs/2026-11-06-farhome-pulsanti-design.md) descrive schermate, gesti, inventario, selettore e salvataggio; resta da approvare prima dell'implementazione. L'anteprima separata usa dati dimostrativi e non è collegata a Home Assistant. Verificare i blueprint dei dispositivi e ricostruire le dipendenze delle associazioni esistenti prima di migrare.
 
 L'integrazione conserva per ora il dominio upstream `switch_manager`: installazione originale e fork non sono due integrazioni indipendenti nella stessa istanza. Il pannello e i comandi WebSocket upstream esaminati richiedono un amministratore; accesso per altri utenti da definire solo se richiesto.
 

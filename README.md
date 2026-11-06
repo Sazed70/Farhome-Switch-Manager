@@ -24,6 +24,7 @@ Cycling through a mixed list of different target types, such as lights and fans 
 
 - **`farhome`** is the default branch for Farhome documentation and future changes.
 - **`master`** preserves the upstream reference for synchronization and comparison.
+- [Dedicated panel design proposal — awaiting approval](docs/superpowers/specs/2026-11-06-farhome-pulsanti-design.md)
 - [Attribution, licensing and collaboration rules](ATTRIBUTION.md)
 - [Original upstream documentation at the fork's starting revision](https://github.com/macpit/Home-Assistant-Switch-Manager/blob/73c7af5e2e23132f6c2e0489d99016babf8741d3/README.md)
 - [Current upstream project](https://github.com/macpit/Home-Assistant-Switch-Manager)
