@@ -10,6 +10,7 @@ from homeassistant.helpers.script import async_validate_actions_config, SCRIPT_M
 from ..const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
 from ..models import ManagedSwitchConfig, reconcile_buttons_with_blueprint
 from .types import config_snapshot, revision
+from .actions import apply_quick_actions
 
 
 class FarhomeError(ValueError):
@@ -171,8 +172,11 @@ async def _replace_runtime(hass, config_id, data, blueprint):
         raise FarhomeError('partial_write', 'Configurazione salvata, ma non avviata. È necessario ricaricare e verificarla.') from err
 
 
-async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch=False):
+async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch=False, quick_actions=None):
     metadata, store, configs = _objects(hass)
+    if not isinstance(config, dict):
+        raise FarhomeError('validation_error', 'Configurazione non valida.')
+    config = deepcopy(config)
     config_id = config.get('id')
     existing = config_id is not None
     if existing:
@@ -180,7 +184,15 @@ async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch
         _check_revision(hass, config_id, expected_revision)
     else:
         config_id = store.get_available_id()
+    if quick_actions is not None:
+        try:
+            apply_quick_actions(hass, config, quick_actions)
+        except ValueError as err:
+            raise FarhomeError('validation_error', str(err)) from err
     data, blueprint = await _validate(hass, config, fix_mismatch=fix_mismatch)
+    for patch in quick_actions or []:
+        if patch['value'].get('loop') and blueprint.buttons[patch['button']].actions[patch['action']].release_index is None:
+            raise FarhomeError('validation_error', 'Questo gesto non espone un evento di rilascio.')
     data['id'] = config_id
     patch = _binding_patch(hass, config_id, binding)
     old = configs.get(config_id)
@@ -192,10 +204,10 @@ async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch
     return _read(hass, config_id)
 
 
-async def async_save_config(hass, config, metadata, expected_revision, *, fix_mismatch=False):
+async def async_save_config(hass, config, metadata, expected_revision, *, fix_mismatch=False, quick_actions=None):
     store, _, _ = _objects(hass)
     async with store.config_lock:
-        return await _save_locked(hass, config, metadata, expected_revision, fix_mismatch=fix_mismatch)
+        return await _save_locked(hass, config, metadata, expected_revision, fix_mismatch=fix_mismatch, quick_actions=quick_actions)
 
 
 async def async_set_enabled(hass, config_id, enabled, expected_revision, conflict_check=False):

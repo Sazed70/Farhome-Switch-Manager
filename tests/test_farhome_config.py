@@ -23,6 +23,7 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.hass = HomeAssistant(self.directory.name)
+        self.hass.loop.slow_callback_duration = 1.0
         self.metadata_disk = MemoryStorage()
         self.metadata = FarhomeStore(self.hass, storage=self.metadata_disk)
         await self.metadata.async_load()
@@ -142,7 +143,8 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         data = self.draft()
         data.update(id='9', blueprint='removed-blueprint', enabled=True)
         await self.store.async_write_config('9', data)
-        broken = ManagedSwitchConfig(self.hass, 'removed-blueprint', '9', data)
+        with self.assertLogs('custom_components.switch_manager', level='ERROR'):
+            broken = ManagedSwitchConfig(self.hass, 'removed-blueprint', '9', data)
         self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES]['9'] = broken
         current = await async_read_config(self.hass, '9')
         result = await async_set_enabled(self.hass, '9', False, current['revision'], False)
@@ -171,3 +173,20 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         for name in ('websocket_save_config', 'websocket_toggle_config_enabled', 'websocket_delete_config', 'websocket_duplicate_config'):
             with self.assertRaises(Unauthorized):
                 handlers[name](self.hass, SimpleNamespace(user=SimpleNamespace(is_admin=False)), {'id': 1})
+
+    async def test_quick_payload_is_checked_and_built_on_server(self):
+        async def no_actuation(call):
+            raise AssertionError('Editing must not execute services')
+        self.hass.services.async_register('fan','increase_speed',no_actuation)
+        self.hass.states.async_set('fan.air','off',{'supported_features':48})
+        patch_value={'domain':'fan','kind':'increase','entity_id':'fan.air','step':10,'mode':'restart'}
+        patches=[{'button':0,'action':0,'value':patch_value}]
+        config=self.draft()
+        with self.assertRaisesRegex(ValueError,'validation_error'):
+            await async_save_config(self.hass,config,None,None,quick_actions=patches)
+        self.assertEqual(self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES],{})
+        self.hass.states.async_set('fan.air','off',{'supported_features':49})
+        result=await async_save_config(self.hass,config,None,None,quick_actions=patches)
+        self.assertEqual(result['config']['buttons'][0]['actions'][0]['sequence'],[{'action':'fan.increase_speed','target':{'entity_id':'fan.air'},'data':{'percentage_step':10}}])
+        self.assertEqual(config['buttons'][0]['actions'][0]['sequence'],[])
+        self.assertFalse(result['config']['enabled'])

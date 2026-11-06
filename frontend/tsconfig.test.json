@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "src",
+    "outDir": ".test-build"
+  },
+  "include": ["src/types.ts", "src/farhome/types.ts", "src/farhome/actions.ts"]
+}
