@@ -1,6 +1,6 @@
 # Farhome: pannello Pulsanti per Home Assistant
 
-Data: 6 novembre 2026. Stato: proposta da approvare, non implementata.
+Data: 6 novembre 2026. Stato: progetto approvato dall'utente («perfetto») dopo l'aggiunta delle miniature; implementazione e installazione non ancora eseguite.
 Repository di destinazione: Sazed70/Farhome-Switch-Manager, ramo farhome.
 Base esaminata: 8646d78f7485dbe6728634d0ef59b3edb597d750.
 
@@ -109,7 +109,7 @@ Nomi interni dei DTO/endpoint, suddivisione componenti e formato della revisione
 
 ## Verifica della proposta e fonti
 
-Revisione indipendente di costruibilità completata sul documento: individuata e risolta l'ambiguità sulla persistenza delle opzioni input_select. Dopo la precisazione su helper UI e YAML, nessuna questione importante rimasta secondo il revisore. Questa revisione non equivale a implementazione, collaudo o approvazione dell'utente.
+Revisione indipendente di costruibilità completata sul documento: individuata e risolta l'ambiguità sulla persistenza delle opzioni input_select. Dopo la precisazione su helper UI e YAML, nessuna questione importante rimasta secondo il revisore. Anteprima con miniature approvata dall'utente («perfetto») il 6 novembre 2026; approvazione del progetto distinta da implementazione, collaudo e installazione in produzione.
 
 Fonti tecniche lette, senza modificare Home Assistant:
 
