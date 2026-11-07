@@ -70,10 +70,10 @@ async def websocket_save_config(hass, connection, msg):
 
 
 @websocket_api.require_admin
-@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/config/enabled', vol.Required('config_id'): str, vol.Required('enabled'): bool, vol.Required('expected_revision'): str, vol.Optional('conflict_check', default=False): bool})
+@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/config/enabled', vol.Required('config_id'): str, vol.Required('enabled'): bool, vol.Required('expected_revision'): str, vol.Optional('conflict_check', default=False): bool, vol.Optional('manual_confirmation'): bool})
 @websocket_api.async_response
 async def websocket_enabled(hass, connection, msg):
-    await async_reply(connection, msg, async_set_enabled(hass, msg['config_id'], msg['enabled'], msg['expected_revision'], msg['conflict_check']))
+    await async_reply(connection, msg, async_set_enabled(hass, msg['config_id'], msg['enabled'], msg['expected_revision'], msg['conflict_check'], manual_confirmation=msg.get('manual_confirmation')))
 
 
 @websocket_api.require_admin

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.components.automation.const import DATA_COMPONENT
 from homeassistant.exceptions import Unauthorized
 from custom_components.switch_manager.const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
 from custom_components.switch_manager.models import Blueprint, ManagedSwitchConfig
@@ -142,6 +143,52 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
             await async_set_enabled(self.hass, initial['config_id'], True, current['revision'], True)
         self.assertEqual(self.hass.states.get('automation.synthetic').state, 'on')
         self.assertFalse(self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES][initial['config_id']].enabled)
+
+    async def test_matching_inventory_allows_direct_activation_of_unverified_draft(self):
+        initial = await self.create({'device_id': 'device', 'verified': False})
+        snapshot = {'warnings': [], 'controllers': [{'device_id': 'device', 'blueprint_suggestion': {
+            'id': 'synthetic', 'identifier': 'z2m/desk/action', 'reason': 'gestures',
+        }}]}
+        with patch('custom_components.switch_manager.farhome.inventory.async_snapshot', AsyncMock(return_value=snapshot)):
+            active = await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=False)
+        self.assertTrue(active['config']['enabled'])
+        self.assertTrue(active['metadata']['verified'])
+        self.assertTrue(active['metadata']['conflicts_checked'])
+        changed = await async_save_config(self.hass, {**active['config'], 'identifier': 'z2m/other/action'}, None, active['revision'])
+        self.assertFalse(changed['config']['enabled'])
+        self.assertFalse(changed['metadata']['verified'])
+        self.assertFalse(changed['metadata']['conflicts_checked'])
+
+    async def test_uncertain_match_requires_confirmation_without_writing(self):
+        initial = await self.create({'device_id': 'device', 'verified': False})
+        snapshot = {'warnings': [], 'controllers': [{'device_id': 'device', 'blueprint_suggestion': {
+            'id': 'synthetic', 'identifier': 'z2m/desk/action', 'reason': 'mode_unknown',
+        }}]}
+        with patch('custom_components.switch_manager.farhome.inventory.async_snapshot', AsyncMock(return_value=snapshot)):
+            with self.assertRaisesRegex(ValueError, 'activation_confirmation_required'):
+                await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=False)
+        self.assertEqual(await async_read_config(self.hass, initial['config_id']), initial)
+        active = await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=True)
+        self.assertTrue(active['config']['enabled'])
+
+    async def test_mqtt_automation_conflict_cannot_be_overridden(self):
+        initial = await self.create({'device_id': 'device', 'verified': False})
+        automation = SimpleNamespace(entity_id='automation.synthetic', raw_config={
+            'triggers': [{'trigger': 'mqtt', 'topic': 'z2m/desk'}],
+        })
+        self.hass.data[DATA_COMPONENT] = SimpleNamespace(entities=[automation])
+        self.hass.states.async_set(automation.entity_id, 'on')
+        with self.assertRaisesRegex(ValueError, 'activation_conflict'):
+            await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=True)
+        self.assertEqual(await async_read_config(self.hass, initial['config_id']), initial)
+
+    async def test_another_active_farhome_configuration_blocks_same_topic(self):
+        first = await self.create({'device_id': 'device', 'verified': True})
+        await async_set_enabled(self.hass, first['config_id'], True, first['revision'], True)
+        second = await self.create({'device_id': 'device', 'verified': False})
+        with self.assertRaisesRegex(ValueError, 'activation_conflict'):
+            await async_set_enabled(self.hass, second['config_id'], True, second['revision'], manual_confirmation=True)
+        self.assertEqual(await async_read_config(self.hass, second['config_id']), second)
 
     async def test_missing_revision_cannot_overwrite_existing_config(self):
         initial = await self.create()

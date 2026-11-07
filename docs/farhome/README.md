@@ -4,7 +4,7 @@ Fork pubblico di [macpit/Home-Assistant-Switch-Manager](https://github.com/macpi
 
 ## Stato
 
-Pannello sviluppato il 6 novembre 2026 con esecuzione diretta nella chat, sul ramo `work/farhome-panel`, a partire dalla progettazione approvata. Inventario, stanze, miniature, gesti multidominio e selettore persistente sono implementati e verificati con dati sintetici. Nessuna installazione o migrazione eseguita su Home Assistant. Base iniziale: `73c7af5e2e23132f6c2e0489d99016babf8741d3` dell'upstream. [Prove e limiti](testing-and-migration.md).
+Il pannello sul ramo `work/farhome-panel` include inventario, stanze, miniature, ricerca blueprint, gesti multidominio e selettore persistente. L’interfaccia segue la lingua del profilo Home Assistant per italiano e inglese. Il ramo di sviluppo è stato provato su un singolo controller. La base upstream è `73c7af5e2e23132f6c2e0489d99016babf8741d3`. [Prove e limiti](testing-and-migration.md).
 
 ## Organizzazione
 

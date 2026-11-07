@@ -28,7 +28,11 @@ window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',stat
     const device=fixture.controllers.find(x=>x.device_id===msg.metadata?.device_id);if(device&&!device.config_ids.includes(id))device.config_ids.push(id);
     return {config_id:id,config:structuredClone(configs[id]),metadata:structuredClone(msg.metadata),revision:'config-'+counter};
   }
-  if(msg.type.endsWith('/config/enabled')){configs[msg.config_id].enabled=msg.enabled;return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:fixture.metadata.bindings[msg.config_id],revision:'config-'+(++counter)};}
+  if(msg.type.endsWith('/config/enabled')){
+    if(msg.enabled&&window.requireActivationConfirmation&&!msg.manual_confirmation)throw {code:'activation_confirmation_required'};
+    configs[msg.config_id].enabled=msg.enabled;
+    return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:fixture.metadata.bindings[msg.config_id],revision:'config-'+(++counter)};
+  }
   if(msg.type.endsWith('/metadata/save')){for(const [ns,entries]of Object.entries(msg.patch))for(const [key,value]of Object.entries(entries))fixture.metadata[ns][key]=value;fixture.metadata_revision='meta-'+(++counter);if(msg.patch.controllers?.manual&&!fixture.controllers.some(x=>x.device_id==='manual'))fixture.controllers.push(controller('manual','Controller manuale','studio',[],'Unknown','unknown'));if(msg.patch.bindings)fixture.unassociated_configs=[];return {metadata:structuredClone(fixture.metadata),revision:fixture.metadata_revision};}
   if(msg.type.endsWith('/selector/get'))return structuredClone(helper);
   if(msg.type.endsWith('/selector/update')){if(window.helperFailure)throw {code:helperFailure,message:'Helper modificato: ricarica.'};helper={...helper,options:msg.options,active:msg.active||helper.active,initial:msg.initial||helper.initial,revision:'helper-'+(++counter)};return structuredClone(helper);}

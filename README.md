@@ -6,7 +6,7 @@ Farhome builds on [macpit/Home-Assistant-Switch-Manager](https://github.com/macp
 
 ## Project status
 
-**Development implementation — updated 2026-11-06.** The dedicated Pulsanti panel is implemented on the `work/farhome-panel` branch. It has automated backend and browser validation with synthetic devices. It has not been installed or tested with household hardware; there is no Farhome application release yet. See [validation and staged migration](docs/farhome/testing-and-migration.md) for tested behavior and remaining limits.
+**Development implementation — updated 2026-11-07.** The dedicated Pulsanti panel is implemented on the `work/farhome-panel` branch. It has automated backend and browser validation with synthetic devices and has been used in a single-controller pilot. There is no Farhome application release yet. See [validation and staged migration](docs/farhome/testing-and-migration.md) for tested behavior and remaining limits.
 
 Farhome adds inventory, administrative APIs and a Lit panel to the [inherited application](https://github.com/macpit/Home-Assistant-Switch-Manager/tree/73c7af5e2e23132f6c2e0489d99016babf8741d3). Device blueprints and the upstream event/script engine are retained. Existing upstream functionality belongs to that project; it is not a Farhome contribution.
 

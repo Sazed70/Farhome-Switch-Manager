@@ -1,7 +1,7 @@
 # Pannello Pulsanti: verifica e migrazione futura
 
-Stato al 7 novembre 2026: implementazione di sviluppo sul ramo `work/farhome-panel`.
-Non installata su Home Assistant domestico. Nessuna release applicativa.
+Implementazione sul ramo `work/farhome-panel`, con una prova su un singolo controller.
+Nessuna release applicativa.
 
 ## Comportamento implementato
 
@@ -24,9 +24,13 @@ Non installata su Home Assistant domestico. Nessuna release applicativa.
   L’editor nuovo non invia azioni a luci, ventilatori o prese durante la configurazione.
 - Salvataggi revisionati condivisi con l’editor originale, bozze conservate sugli
   errori, controllo delle modifiche non salvate e configurazioni nuove disabilitate.
-  L’attivazione richiede associazione verificata e verifica esplicita dei gestori
-  concorrenti. Le automazioni esterne dichiarate devono risultare disattivate;
-  Farhome non le disattiva automaticamente.
+  Dopo il salvataggio, **Attiva configurazione** verifica che blueprint e topic
+  coincidano con quelli rilevati da Zigbee2MQTT. Per un’associazione incerta o una
+  gestione esterna serve una conferma manuale. Un conflitto rilevato blocca anche
+  l’attivazione confermata. Il controllo confronta le configurazioni Farhome attive,
+  le automazioni esterne dichiarate e i trigger Home Assistant con topic MQTT
+  letterale o riferimento diretto al dispositivo. Template e gestori esterni non
+  dichiarati possono richiedere una verifica a parte. Farhome non disattiva automazioni.
 - Selettore di sole luci con helper input_select esistente. Click e rotazioni
   vengono assegnati singolarmente: gli altri gesti e il feedback avanzato restano
   intatti. La luce viene letta all’evento e validata prima dell’azione dinamica.
@@ -78,7 +82,7 @@ le suite, compreso ricaricamento del vero Store HA e del helper input_select.
 Il job Python usa Ubuntu 24.04, per cui GitHub Actions distribuisce Python 3.14.2,
 e basa la cache su `requirements-test.txt`.
 
-Prove locali dopo la revisione indipendente: 57 test Python, 11 test Node, controllo
+Prove locali: 64 test Python, 11 test Node, controllo
 TypeScript, build e due suite browser. Le regressioni aggiunte verificano che il
 cambio di destinatario conservi i parametri del gesto, che la conferma del
 selettore sia disabilitata durante un salvataggio e si chiuda al cambio di gesto,
@@ -112,7 +116,7 @@ di tutte le dipendenze indirette. Non è garantita l’esclusività dell’helpe
 controller. Le API della collezione e i componenti frontend HA devono essere
 ricontrollati dopo aggiornamenti HA. Gli endpoint sono amministrativi.
 
-## Prova reale futura, da autorizzare separatamente
+## Procedura per una prova su un nuovo controller
 
 1. Scegliere un solo controller e raccogliere modello, blueprint ed eventi reali.
 2. Fare backup HA e copia recuperabile della configurazione/automazioni/helper.
@@ -126,8 +130,8 @@ ricontrollati dopo aggiornamenti HA. Gli endpoint sono amministrativi.
 7. Se il comportamento diverge, disabilitare Farhome prima di ripristinare il vecchio
    gestore e i dati salvati. Annotare esito e stato effettivo.
 
-Questa procedura non è stata eseguita. Il dominio resta `switch_manager`: fork e
-originale non sono due integrazioni indipendenti nella stessa istanza.
+Una prova pilota ha verificato click singolo e doppio click. Il dominio resta
+`switch_manager`, condiviso con l’integrazione originale.
 
 La verifica HACS ereditata controlla anche i requisiti per la pubblicazione nel
 catalogo. Sul fork segnala che mancano i topic richiesti e che le issue sono
