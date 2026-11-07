@@ -41,6 +41,7 @@ export class FarhomeDeviceEditor extends LitElement{
   @state() private showAdvanced=false;
   @state() private replacePending=false;
   @state() private activationPending=false;
+  @state() private deletePending=false;
   @state() private helperChoice='';
   @state() private creatingSelector=false;
   @state() private helperDirty=false;
@@ -89,16 +90,21 @@ export class FarhomeDeviceEditor extends LitElement{
   protected get currentQuick(){return this.quick.get(this.selected)|| (this.action?parseQuickAction(this.action):null);}
 
   protected updated(changed:Map<string,unknown>){
-    if(changed.has('controller')&&(changed.get('controller') as Controller|undefined)?.device_id!==this.controller.device_id)this.openController();
-    if((changed.has('replacePending')&&this.replacePending)||(changed.has('activationPending')&&this.activationPending))this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
+    if(changed.has('controller')){
+      const previous=changed.get('controller') as Controller|undefined;
+      if(previous?.device_id!==this.controller.device_id||(!this.draft&&previous.config_ids.length!==this.controller.config_ids.length))this.openController();
+    }
+    if((changed.has('replacePending')&&this.replacePending)||(changed.has('activationPending')&&this.activationPending)||(changed.has('deletePending')&&this.deletePending))this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
   }
   private async openController(){
+    this.deletePending=false;
     this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error=undefined;this.saved=false;this.loading=false;this.preparing=false;this.pickedConfig='';this.activationPending=false;this.creatingSelector=false;this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.resetSetupForm();this.markDirty(false);
     if(this.controller.config_ids.length===1){this.pickedConfig=this.controller.config_ids[0];await this.load(this.pickedConfig);}
     else if(!this.controller.config_ids.length)await this.loadBlueprints();
   }
   private async loadBlueprints(){try{const result=await this.hass.callWS<{blueprints:Record<string,Blueprint>}>({type:'switch_manager/blueprints'});this.blueprints=result.blueprints;}catch(err){this.error=errorKey(err,'load_error');}}
   private adopt(value:ConfigEnvelope){
+    this.deletePending=false;
     this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.activationPending=false;this.changingBlueprint=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
   }
   async load(id:string){const token=++this.token;this.loading=true;this.error=undefined;try{const value=await this.api.get(id);if(token===this.token)this.adopt(value);}catch(err){if(token===this.token)this.error=errorKey(err,'load_error');}finally{if(token===this.token)this.loading=false;}}
@@ -304,6 +310,23 @@ export class FarhomeDeviceEditor extends LitElement{
       else this.error=errorKey(err,'activation_error');
     }finally{this.busy=false;}
   }
+  private get canDelete(){return !!this.envelope&&!this.loading&&!this.saving&&!this.hasDirty&&!this.changingBlueprint;}
+  private closeDeleteConfirmation(){
+    this.deletePending=false;
+    this.updateComplete.then(()=>this.renderRoot.querySelector<HTMLButtonElement>('[data-delete-configuration]')?.focus());
+  }
+  private async deleteConfiguration(){
+    if(!this.canDelete)return;
+    const envelope=this.envelope!;
+    this.deletePending=false;
+    this.busy=true;this.error=undefined;
+    try{
+      await this.api.deleteConfig(envelope.config_id,envelope.revision);
+      this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.pickedConfig='';
+      this.dispatchEvent(new Event('delete',{bubbles:true,composed:true}));
+    }catch(err){this.error=errorKey(err,'delete_configuration_error');}
+    finally{this.busy=false;}
+  }
   private get canEditHelper(){return !!this.envelope&&!!this.draft?.enabled&&!!this.binding?.verified&&!!this.binding?.conflicts_checked;}
   private setCreatingSelector(open:boolean){
     this.creatingSelector=open;
@@ -389,9 +412,26 @@ export class FarhomeDeviceEditor extends LitElement{
           <label>${this.text('name')}<input .value=${this.draft.name} maxlength="255" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.name=(e.target as HTMLInputElement).value;this.changed();}}></label>
           <label>${this.text('identifier')}<input .value=${this.draft.identifier} maxlength="1024" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.identifier=(e.target as HTMLInputElement).value;this.changed();}}></label>
           ${this.changingBlueprint?this.blueprintChange():html`<div><button ?disabled=${this.saving||this.hasHelperDirty} @click=${this.openBlueprintChange}>${this.text('blueprint_change')}</button></div>`}
-          </div></details>
-        <footer class="row"><button class="primary" ?disabled=${this.saving||this.creatingSelector||this.changingBlueprint||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button><button ?disabled=${this.saving||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>${!this.readonly&&this.envelope?html`<button ?disabled=${this.saving||this.hasDirty||this.changingBlueprint} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}<span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span></footer>`:nothing}
+          </div></details>`:nothing}
+        <footer class="row">
+          ${!this.readonly?html`
+            <button class="primary" ?disabled=${this.saving||this.creatingSelector||this.changingBlueprint||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button>
+            <button ?disabled=${this.saving||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>
+            ${this.envelope?html`<button ?disabled=${this.saving||this.hasDirty||this.changingBlueprint} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}
+          `:nothing}
+          ${this.envelope?html`<button data-delete-configuration ?disabled=${!this.canDelete} @click=${()=>this.deletePending=true}>${this.text('delete_configuration')}</button>`:nothing}
+          <span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span>
+        </footer>
       `:nothing}
+      ${this.deletePending&&this.envelope?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true"
+        aria-label=${this.text('delete_configuration')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.closeDeleteConfirmation())}>
+        <p><strong>${this.envelope.config.name} · ID ${this.envelope.config_id}</strong></p>
+        <p>${this.text('delete_configuration_notice')}</p>
+        <div class="actions">
+          <button class="delete-confirm" @click=${this.deleteConfiguration}>${this.text('delete_configuration_confirm')}</button>
+          <button @click=${this.closeDeleteConfirmation}>${this.text('cancel')}</button>
+        </div>
+      </div></div>`:nothing}
       ${this.activationPending?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true"
         aria-label=${this.text('verify_activation')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.activationPending=false)}>
         <p>${this.text('verify_activation_details')}</p><div class="actions">
@@ -403,6 +443,6 @@ export class FarhomeDeviceEditor extends LitElement{
     </section>`;
   }
   static styles=[controls,css`
-    section{padding:28px}section.notice{padding:14px}.blueprint-choice{margin-top:8px;justify-content:space-between}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
+    section{padding:28px}section.notice{padding:14px}.delete-confirm{color:var(--error-color,#b3261e)}.blueprint-choice{margin-top:8px;justify-content:space-between}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
   `];
 }
