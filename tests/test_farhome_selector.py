@@ -194,3 +194,12 @@ class SelectorTests(unittest.IsolatedAsyncioTestCase):
         await script.async_run()
         self.assertEqual(len(calls), 1)
 
+    async def test_generated_next_action_cycles_and_toggles_feedback(self):
+        next_action = build_selector_action('input_select.renamed', 'next')
+        self.assertEqual(len(next_action['sequence']), 6)
+        self.assertEqual(next_action['sequence'][0]['action'], 'input_select.select_next')
+        self.assertEqual(next_action['sequence'][3]['action'], 'light.toggle')
+        self.assertEqual(next_action['sequence'][4]['delay'], {'milliseconds': 500})
+        self.assertEqual(next_action['sequence'][5]['action'], 'light.toggle')
+        self.assertIn("states('input_select.renamed')", next_action['sequence'][1]['variables']['farhome_selected_light'])
+

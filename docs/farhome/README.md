@@ -18,8 +18,8 @@ Il pannello sul ramo `work/farhome-panel` include inventario, stanze, miniature,
 1. Una pagina per ogni stanza, con pulsanti e manopole raggruppati e ordinati per modello.
 2. Una scheda per dispositivo che mostri le associazioni correnti e consenta la configurazione veloce.
 3. Modifica delle funzioni dei gesti: click, doppio click, pressione prolungata e rotazione nelle direzioni supportate dal modello.
-4. Azioni con target di diversi tipi: luci, ventilatori, prese e altri dispositivi compatibili. I parametri offerti devono rispettare le capacità del target; per esempio luminosità per una luce e velocità per un ventilatore che la espone.
-5. Supporto della logica HOBEIAN già utilizzata: click per selezionare una luce da un elenco configurato, rotella per regolarne la luminosità, doppio click e pressione prolungata con funzioni indipendenti. Non assumere la stessa configurazione per tutte le manopole.
+4. Azioni con target di diversi tipi: luci, ventilatori, prese e altri dispositivi compatibili. I parametri offerti devono rispettare le capacità del target; per esempio luminosità per una luce e velocità per un ventilatore che la espone. Possibilità di agire su tutte le luci o dispositivi di una stanza con un singolo gesto tramite target d'area (`area_id`).
+5. Supporto della logica HOBEIAN già utilizzata: click per selezionare una luce da un elenco configurato con feedback visivo a doppio toggle (500 ms) per identificare la luce attiva (accensione temporanea se spenta, micro-lampeggio se accesa), rotella per regolarne la luminosità, doppio click e pressione prolungata con funzioni indipendenti. Non assumere la stessa configurazione per tutte le manopole.
 6. Per i selettori, distinguere il target attivo dall'elenco configurato e dal suo ordine.
 7. Il ciclo di selezione misto fra tipi di target diversi, come luci e ventilatori nello stesso elenco, resta fuori dal perimetro attuale.
 8. Miniatura del modello nell'elenco e nel dettaglio: riutilizzare le immagini disponibili in Zigbee2MQTT o nel blueprint associato, con identificazione verificata, attribuzioni e fallback quando la foto manca.

@@ -10,7 +10,7 @@ import {t,TextKey,errorKey,gestureTitle} from './i18n.js';
 import {controls} from './styles.js';
 import {dialogKeys} from './dialog.js';
 import {matchingGestures,sharesIdentifier} from './blueprint-change.js';
-import {buildQuickAction,parseQuickAction,supportedQuickActions,supportsBrightness,buildSelectorAction,parseSelectorAction} from './actions.js';
+import {buildQuickAction,parseQuickAction,supportedQuickActions,supportedAreaQuickActions,supportsBrightness,buildSelectorAction,parseSelectorAction} from './actions.js';
 import {FarhomeSelectorEditor} from './selector-editor.js';
 import './selector-editor.js';
 import './thumbnail.js';
@@ -20,6 +20,7 @@ export class FarhomeDeviceEditor extends LitElement{
   @property({attribute:false}) hass!:FarhomeHass;
   @property({attribute:false}) controller!:Controller;
   @property({attribute:false}) route?:Route;
+  @property({attribute:false}) areas: {id:string;name:string}[] = [];
   @property({type:Boolean}) narrow=false;
   @state() private envelope?:ConfigEnvelope;
   @state() private draft?:EditableConfig;
@@ -128,13 +129,26 @@ export class FarhomeDeviceEditor extends LitElement{
     const domain=(entity?.entity_id.split('.')[0]||'light') as Domain;
     this.setQuick({domain,entity_id:entity?.entity_id||'',kind:entity?supportedQuickActions(entity,this.hass.services)[0].kind:'on',mode:(this.action?.mode||'restart') as ScriptMode});
   }
-  private changeTarget(value:QuickAction,entity_id:string){
-    this.setQuick({...value,entity_id});
+  private changeTarget(value:QuickAction,target:string){
+    if(target.startsWith('area:')){
+      const area_id=target.slice(5);
+      const {step,entity_id,...shared}=value;
+      const next:QuickAction={...shared,area_id};
+      if(!['toggle','on','off'].includes(next.kind))next.kind='toggle';
+      this.setQuick(next);
+      return;
+    }
+    const {area_id,...shared}=value;
+    const next:QuickAction={...shared,entity_id:target};
+    const entity=this.hass.states[target];
+    const options=supportedQuickActions(entity,this.hass.services);
+    if(!options.some(x=>x.kind===next.kind))next.kind=options[0]?.kind||'toggle';
+    this.setQuick(next);
   }
   private selectDomain(value:QuickAction,domain:Domain){
     const entity=Object.values(this.hass.states).find(item=>item.entity_id.startsWith(domain+'.')&&supportedQuickActions(item,this.hass.services).length);
     const kind=supportedQuickActions(entity,this.hass.services)[0]?.kind??(domain==='scene'?'activate':domain==='script'?'run':'on');
-    const {step,transition,brightness_pct,color_temp_kelvin,percentage,...shared}=value;
+    const {step,transition,brightness_pct,color_temp_kelvin,percentage,area_id,...shared}=value;
     this.setQuick({...shared,domain,entity_id:entity?.entity_id||'',kind,...(['increase','decrease'].includes(kind)?{step:10}:{})});
   }
   private changeKind(value:QuickAction,kind:QuickAction['kind']){
@@ -151,15 +165,30 @@ export class FarhomeDeviceEditor extends LitElement{
   private advancedChanged(event:CustomEvent){if(this.busy||this.readonly||!Array.isArray(event.detail.value))return;const [b,a]=this.indices;this.draft!.buttons[b].actions[a]={...this.action!,sequence:structuredClone(event.detail.value)};this.quick.delete(this.selected);this.selectors.delete(this.selected);this.changed();}
   private numeric(label:TextKey,key:keyof QuickAction,value:QuickAction,min:number,max?:number,optional=false){return html`<label>${this.text(label)}<input type="number" min=${min} max=${max??nothing} step="any" .value=${String(value[key]??'')} ?required=${!optional} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{const input=e.target as HTMLInputElement;const next={...value};if(optional&&!input.value)delete next[key];else (next as any)[key]=input.valueAsNumber;this.setQuick(next);}}></label>`;}
   private quickForm(value:QuickAction){
-    const entity=this.hass.states[value.entity_id];const options=supportedQuickActions(entity,this.hass.services);
+    const isArea=!!value.area_id;
+    const entity=!isArea&&value.entity_id?this.hass.states[value.entity_id]:undefined;
+    const options=isArea?supportedAreaQuickActions():supportedQuickActions(entity,this.hass.services);
+    const selectedTarget=isArea?`area:${value.area_id}`:(value.entity_id||'');
+    const areas=this.areas||[];
+    const roomPrefix=value.domain==='light'?this.text('all_lights_in'):this.text('all_devices_in');
     return html`<div class="fields">
       <label>${this.text('target_type')}<select aria-label=${this.text('target_type')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>this.selectDomain(value,(e.target as HTMLSelectElement).value as Domain)}>${(['light','fan','switch','scene','script'] as Domain[]).map(domain=>html`<option value=${domain} .selected=${domain===value.domain}>${this.text(domain)}</option>`)}</select></label>
-      <label>${this.text('target')}<select aria-label=${this.text('target')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>this.changeTarget(value,(e.target as HTMLSelectElement).value)}><option value="" .selected=${!value.entity_id}>${this.text('choose')}</option>${!entity&&value.entity_id?html`<option value=${value.entity_id} .selected=${true}>${value.entity_id} · ${this.text('unavailable')}</option>`:nothing}${Object.values(this.hass.states).filter(entity=>entity.entity_id.startsWith(value.domain+'.')).sort((a,b)=>String(a.attributes.friendly_name||a.entity_id).localeCompare(String(b.attributes.friendly_name||b.entity_id),this.hass.language)).map(entity=>html`<option value=${entity.entity_id} .selected=${entity.entity_id===value.entity_id}>${entity.attributes.friendly_name||entity.entity_id}${entity.state==='unavailable'?' · '+this.text('unavailable'):''}</option>`)}</select></label>
+      <label>${this.text('target')}<select aria-label=${this.text('target')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>this.changeTarget(value,(e.target as HTMLSelectElement).value)}>
+        <option value="" .selected=${!selectedTarget}>${this.text('choose')}</option>
+        ${['light','fan','switch'].includes(value.domain)&&areas.length?html`
+          <optgroup label=${this.text('rooms')}>
+            ${areas.map(area=>html`<option value=${`area:${area.id}`} .selected=${selectedTarget===`area:${area.id}`}>${roomPrefix} ${area.name}</option>`)}
+          </optgroup>`:nothing}
+        <optgroup label=${this.text('individual_entities')}>
+          ${!entity&&!isArea&&value.entity_id?html`<option value=${value.entity_id} .selected=${true}>${value.entity_id} · ${this.text('unavailable')}</option>`:nothing}
+          ${Object.values(this.hass.states).filter(item=>item.entity_id.startsWith(value.domain+'.')).sort((a,b)=>String(a.attributes.friendly_name||a.entity_id).localeCompare(String(b.attributes.friendly_name||b.entity_id),this.hass.language)).map(item=>html`<option value=${item.entity_id} .selected=${item.entity_id===value.entity_id}>${item.attributes.friendly_name||item.entity_id}${item.state==='unavailable'?' · '+this.text('unavailable'):''}</option>`)}
+        </optgroup>
+      </select></label>
       <label>${this.text('function')}<select aria-label=${this.text('function')} ?disabled=${this.busy||this.readonly||!options.length} @change=${(e:Event)=>this.changeKind(value,(e.target as HTMLSelectElement).value as QuickAction['kind'])}>${!options.some(x=>x.kind===value.kind)?html`<option value=${value.kind} .selected=${true}>${this.text(('action_'+value.kind) as TextKey)} · ${this.text('unavailable')}</option>`:nothing}${options.map(option=>html`<option value=${option.kind} .selected=${option.kind===value.kind}>${this.text(option.label_key as TextKey)}</option>`)}</select></label>
-      ${['increase','decrease'].includes(value.kind)?this.numeric(value.domain==='fan'?'step_speed':'step_brightness','step',value,.1,100):nothing}
+      ${!isArea&&['increase','decrease'].includes(value.kind)?this.numeric(value.domain==='fan'?'step_speed':'step_brightness','step',value,.1,100):nothing}
       ${value.domain==='light'?this.numeric('transition','transition',value,0,3600,true):nothing}
-      ${value.domain==='light'&&['on','toggle'].includes(value.kind)&&entity&&supportsBrightness(entity)?this.numeric('brightness','brightness_pct',value,0,100,true):nothing}
-      ${value.domain==='light'&&['on','toggle'].includes(value.kind)&&entity?.attributes.supported_color_modes?.includes('color_temp')?this.numeric('kelvin','color_temp_kelvin',value,entity.attributes.min_color_temp_kelvin||1,entity.attributes.max_color_temp_kelvin,true):nothing}
+      ${value.domain==='light'&&['on','toggle'].includes(value.kind)&&(isArea||(entity&&supportsBrightness(entity)))?this.numeric('brightness','brightness_pct',value,0,100,true):nothing}
+      ${value.domain==='light'&&['on','toggle'].includes(value.kind)&&(isArea||entity?.attributes.supported_color_modes?.includes('color_temp'))?this.numeric('kelvin','color_temp_kelvin',value,entity?.attributes.min_color_temp_kelvin||1,entity?.attributes.max_color_temp_kelvin,true):nothing}
       ${value.domain==='fan'&&value.kind==='on'&&(Number(entity?.attributes.supported_features)&1)?this.numeric('percentage','percentage',value,0,100,true):nothing}
     </div>${!options.length?html`<p class="notice">${this.text('no_options')}</p>`:nothing}`;
   }

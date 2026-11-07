@@ -17,7 +17,8 @@ Nessuna release applicativa.
   Le immagini richiedono che il browser possa raggiungere il catalogo; percorsi
   locali `device_icons` non vengono esposti o copiati automaticamente.
 - Gesti definiti dal blueprint, con moduli rapidi per entità light/fan/switch/scene/
-  script. Capacità e servizi sono validati anche sul backend. Un ventilatore offre
+  script e target d'area (`area_id`) per comandare tutte le luci o i dispositivi di una
+  stanza con un singolo gesto. Capacità e servizi sono validati anche sul backend. Un ventilatore offre
   velocità solo se la supporta; un’entità unavailable conserva il suo identificatore.
 - Sequenze non completamente riconosciute restano avanzate e passano all’editor
   HA corrente. La sostituzione rapida è esplicita e riguarda un solo gesto.
@@ -43,7 +44,9 @@ Nessuna release applicativa.
   e attivare il pulsante. **Crea e collega** crea l’helper nella categoria **Farhome**
   della schermata Helper di Home Assistant. Gli helper riusati conservano la propria
   categoria. **Salva gesti** registra il collegamento. La luce viene letta e validata
-  all’evento.
+  all’evento. Il passaggio alla luce successiva (`next`) include il feedback visivo
+  a doppio toggle a 500 ms (accensione breve se spenta, micro-lampeggio se accesa),
+  mantenendo la retrocompatibilità di lettura per configurazioni legacy senza feedback.
 - Elenco ordinato, luce attiva e iniziale distinti. «Applica elenco» è separato da
   «Salva gesti». Helper UI aggiornati tramite le API native persistenti; helper YAML
   leggibili e utilizzabili, elenco in sola lettura. La modifica di un elenco già

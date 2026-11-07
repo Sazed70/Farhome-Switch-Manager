@@ -4,7 +4,7 @@ export type Domain = 'light'|'fan'|'switch'|'scene'|'script';
 export type QuickKind = 'toggle'|'on'|'off'|'increase'|'decrease'|'activate'|'run';
 export type ScriptMode = 'single'|'restart'|'queued'|'parallel';
 export interface QuickAction {
-  domain: Domain; kind: QuickKind; entity_id: string; mode: ScriptMode;
+  domain: Domain; kind: QuickKind; entity_id?: string; area_id?: string; mode: ScriptMode;
   step?: number; transition?: number; brightness_pct?: number;
   color_temp_kelvin?: number; percentage?: number;
   loop?: boolean; loop_interval?: number; alias?: string;

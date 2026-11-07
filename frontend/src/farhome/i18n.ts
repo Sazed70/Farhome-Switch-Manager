@@ -47,6 +47,7 @@ const extra={
   list_invalid:['Scegli almeno una luce esistente, senza duplicati, e sostituisci le selezioni rimosse.','Choose at least one existing light without duplicates, and replace removed selections.'],
   helper_draft_pending:['Applica l’elenco o scartane la bozza prima di uscire; Salva gesti non modifica l’helper.','Apply the list or discard its draft before leaving; Save gestures does not change the helper.'],
   fixed_target:['Destinatario fisso','Fixed target'],use_selector:['Usa selettore per questo gesto','Use selector for this gesture'],confirm_selector:['Conferma gesto selettore','Confirm selector gesture'],
+  all_lights_in:['Tutte le luci di:','All lights in:'],all_devices_in:['Tutti i dispositivi di:','All devices in:'],individual_entities:['Dispositivi singoli','Single devices'],
   selector_function:['Funzione selettore','Selector function'],next_light:['Seleziona luce successiva','Select next light'],dim_up:['Aumenta luminosità selezionata','Increase selected brightness'],dim_down:['Riduci luminosità selezionata','Decrease selected brightness'],
   selector_summary:['Verrà sostituito soltanto questo gesto. Gli altri gesti, inclusi doppio click, pressione prolungata e feedback avanzati, restano invariati.','Only this gesture will be replaced. Other gestures, including double click, hold and advanced feedback, stay unchanged.'],
   configuration:['Configurazione','Configuration'],choose_configuration:['Scegli una configurazione','Choose a configuration'],
