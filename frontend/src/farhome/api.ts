@@ -9,8 +9,8 @@ export class FarhomeApi {
   save(config:EditableConfig,metadata:Binding|null|undefined,expected_revision:string|undefined,quick_actions:QuickPatch[]=[],selector_actions:SelectorPatch[]=[]):Promise<ConfigEnvelope>{
     return this.hass.callWS({type:'switch_manager/farhome/config/save',config:{...config,blueprint:typeof config.blueprint==='string'?config.blueprint:config.blueprint.id},metadata,expected_revision,quick_actions,selector_actions});
   }
-  setEnabled(config_id:string,enabled:boolean,expected_revision:string,conflict_check:boolean):Promise<ConfigEnvelope>{
-    return this.hass.callWS({type:'switch_manager/farhome/config/enabled',config_id,enabled,expected_revision,conflict_check});
+  setEnabled(config_id:string,enabled:boolean,expected_revision:string,manual_confirmation:boolean):Promise<ConfigEnvelope>{
+    return this.hass.callWS({type:'switch_manager/farhome/config/enabled',config_id,enabled,expected_revision,manual_confirmation});
   }
   saveMetadata(patch:MetadataPatch,expected_revision:string):Promise<{revision:string;metadata:Metadata}>{
     return this.hass.callWS({type:'switch_manager/farhome/metadata/save',patch,expected_revision});

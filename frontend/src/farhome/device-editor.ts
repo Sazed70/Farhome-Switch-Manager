@@ -38,7 +38,7 @@ export class FarhomeDeviceEditor extends LitElement{
   @state() private preparing=false;
   @state() private showAdvanced=false;
   @state() private replacePending=false;
-  @state() private conflictChecked=false;
+  @state() private activationPending=false;
   @state() private helperChoice='';
   @state() private helperDirty=false;
   @state() private helperBusy=false;
@@ -87,16 +87,16 @@ export class FarhomeDeviceEditor extends LitElement{
 
   protected updated(changed:Map<string,unknown>){
     if(changed.has('controller')&&(changed.get('controller') as Controller|undefined)?.device_id!==this.controller.device_id)this.openController();
-    if(changed.has('replacePending')&&this.replacePending)this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
+    if((changed.has('replacePending')&&this.replacePending)||(changed.has('activationPending')&&this.activationPending))this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
   }
   private async openController(){
-    this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error=undefined;this.saved=false;this.loading=false;this.preparing=false;this.pickedConfig='';this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.resetSetupForm();this.markDirty(false);
+    this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error=undefined;this.saved=false;this.loading=false;this.preparing=false;this.pickedConfig='';this.activationPending=false;this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.resetSetupForm();this.markDirty(false);
     if(this.controller.config_ids.length===1){this.pickedConfig=this.controller.config_ids[0];await this.load(this.pickedConfig);}
     else if(!this.controller.config_ids.length)await this.loadBlueprints();
   }
   private async loadBlueprints(){try{const result=await this.hass.callWS<{blueprints:Record<string,Blueprint>}>({type:'switch_manager/blueprints'});this.blueprints=result.blueprints;}catch(err){this.error=errorKey(err,'load_error');}}
   private adopt(value:ConfigEnvelope){
-    this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.conflictChecked=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
+    this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.activationPending=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
   }
   async load(id:string){const token=++this.token;this.loading=true;this.error=undefined;try{const value=await this.api.get(id);if(token===this.token)this.adopt(value);}catch(err){if(token===this.token)this.error=errorKey(err,'load_error');}finally{if(token===this.token)this.loading=false;}}
   private emitDirty(){this.dispatchEvent(new CustomEvent('dirty-changed',{detail:{dirty:this.hasDirty},bubbles:true,composed:true}));}
@@ -227,7 +227,18 @@ export class FarhomeDeviceEditor extends LitElement{
     }catch(err){this.error=errorKey(err,'save_error');return false;}finally{this.busy=false;}
   }
   discard(){this.renderRoot.querySelector<FarhomeSelectorEditor>('farhome-selector-editor')?.discard();this.helperDirty=false;if(this.envelope)this.adopt(this.envelope);else{this.draft=undefined;this.resetSetupForm();this.markDirty(false);}this.dispatchEvent(new CustomEvent('cancel',{bubbles:true,composed:true}));}
-  private async toggle(){if(!this.envelope||this.dirty||this.busy)return;this.busy=true;this.error=undefined;try{const value=await this.api.setEnabled(this.envelope.config_id,!this.draft!.enabled,this.envelope.revision,this.conflictChecked);this.adopt(value);this.dispatchEvent(new CustomEvent('save',{detail:value,bubbles:true,composed:true}));}catch(err){this.error=errorKey(err,'activation_error');}finally{this.busy=false;}}
+  private async toggle(manualConfirmation=false){
+    if(!this.envelope||this.hasDirty||this.saving)return;
+    this.activationPending=false;this.busy=true;this.error=undefined;
+    try{
+      const value=await this.api.setEnabled(this.envelope.config_id,!this.draft!.enabled,this.envelope.revision,manualConfirmation);
+      this.adopt(value);
+      this.dispatchEvent(new CustomEvent('save',{detail:value,bubbles:true,composed:true}));
+    }catch(err){
+      if(!manualConfirmation&&(err as {code?:string}|null)?.code==='activation_confirmation_required')this.activationPending=true;
+      else this.error=errorKey(err,'activation_error');
+    }finally{this.busy=false;}
+  }
   private get canLinkHelper(){return !!this.envelope&&!!this.draft?.enabled&&!!this.binding?.verified&&!!this.binding?.conflicts_checked&&!this.readonly;}
   protected selectorSection(){
     if(this.readonly)return nothing;
@@ -270,9 +281,16 @@ export class FarhomeDeviceEditor extends LitElement{
             ${blueprint.buttons[this.indices[0]].actions[this.indices[1]].release_index!=null?html`<label class="check"><input type="checkbox" .checked=${!!action.loop} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.loop=(e.target as HTMLInputElement).checked;if(quick)this.quick.set(this.selected,{...quick,loop:action.loop});this.changed();}}>${this.text('loop')}</label>${action.loop?html`<label>${this.text('loop_interval')}<input type="number" min="50" max="5000" step="1" .value=${String(action.loop_interval??250)} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{action.loop_interval=(e.target as HTMLInputElement).valueAsNumber;if(quick)this.quick.set(this.selected,{...quick,loop_interval:action.loop_interval});this.changed();}}></label>`:nothing}`:nothing}
           </div>`:nothing}`}
         ${this.selectorSection()}
-        ${!this.readonly?html`<details><summary>${this.text('setup')}</summary><div class="stack setup"><label>${this.text('name')}<input .value=${this.draft.name} maxlength="255" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.name=(e.target as HTMLInputElement).value;this.changed();}}></label><label>${this.text('identifier')}<input .value=${this.draft.identifier} maxlength="1024" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.identifier=(e.target as HTMLInputElement).value;this.changed();}}></label><label class="check"><input type="checkbox" .checked=${!!this.binding?.verified} ?disabled=${this.busy} @change=${(e:Event)=>{this.binding={...this.binding!,verified:(e.target as HTMLInputElement).checked};this.changed();}}>${this.text('confirm_binding')}</label><p class="status">${this.text(this.draft.enabled?'enabled':'disabled')}</p><label class="check"><input type="checkbox" .checked=${this.conflictChecked} ?disabled=${this.busy||this.dirty} @change=${(e:Event)=>this.conflictChecked=(e.target as HTMLInputElement).checked}>${this.text('conflict_check')}</label><button ?disabled=${this.busy||this.dirty||!this.envelope||(!this.draft.enabled&&!this.conflictChecked)} @click=${this.toggle}>${this.text(this.draft.enabled?'disable':'enable')}</button></div></details>
-        <footer class="row"><button class="primary" ?disabled=${this.busy||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button><button ?disabled=${this.busy||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button><span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span></footer>`:nothing}
+        ${!this.readonly?html`<details><summary>${this.text('setup')}</summary><div class="stack setup"><label>${this.text('name')}<input .value=${this.draft.name} maxlength="255" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.name=(e.target as HTMLInputElement).value;this.changed();}}></label><label>${this.text('identifier')}<input .value=${this.draft.identifier} maxlength="1024" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.identifier=(e.target as HTMLInputElement).value;this.changed();}}></label></div></details>
+        <footer class="row"><button class="primary" ?disabled=${this.busy||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button><button ?disabled=${this.busy||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>${!this.readonly&&this.envelope?html`<button ?disabled=${this.saving||this.hasDirty} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}<span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span></footer>`:nothing}
       `:nothing}
+      ${this.activationPending?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true"
+        aria-label=${this.text('verify_activation')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.activationPending=false)}>
+        <p>${this.text('verify_activation_details')}</p><div class="actions">
+          <button @click=${()=>this.toggle(true)}>${this.text('confirm_activation')}</button>
+          <button @click=${()=>this.activationPending=false}>${this.text('cancel')}</button>
+        </div>
+      </div></div>`:nothing}
       ${this.replacePending?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true" aria-label=${this.text('replace')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.replacePending=false)}><p>${this.text('replace_advanced')}</p><div class="actions"><button @click=${this.replaceWithQuick}>${this.text('replace')}</button><button @click=${()=>this.replacePending=false}>${this.text('cancel')}</button></div></div></div>`:nothing}
     </section>`;
   }

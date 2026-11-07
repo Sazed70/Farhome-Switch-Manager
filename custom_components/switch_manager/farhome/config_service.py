@@ -4,11 +4,12 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 
+from homeassistant.components import automation
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.script import async_validate_actions_config, SCRIPT_MODE_CHOICES
 
 from ..const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
-from ..models import ManagedSwitchConfig, reconcile_buttons_with_blueprint
+from ..models import ManagedSwitchConfig, reconcile_buttons_with_blueprint, uses_zigbee2mqtt_action_topic
 from .types import config_snapshot, revision
 from .actions import apply_quick_actions
 
@@ -210,8 +211,14 @@ async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch
     patch = _binding_patch(hass, config_id, binding)
     old = configs.get(config_id)
     old_binding = metadata.snapshot()['bindings'].get(config_id)
-    physical_change = old is not None and (data['identifier'] != old.identifier or blueprint.id != getattr(old.blueprint, 'id', old.blueprint) or (binding is not None and (binding.get('device_id'), binding.get('selector_helper')) != ((old_binding or {}).get('device_id'), (old_binding or {}).get('selector_helper'))))
-    data['enabled'] = bool(old and old.enabled and not physical_change)
+    source_change = old is not None and (
+        data['identifier'] != old.identifier or blueprint.id != getattr(old.blueprint, 'id', old.blueprint)
+        or (binding is not None and binding.get('device_id') != (old_binding or {}).get('device_id'))
+    )
+    helper_change = binding is not None and binding.get('selector_helper') != (old_binding or {}).get('selector_helper')
+    if source_change and (effective_binding := binding if binding is not None else old_binding):
+        patch = {'bindings': {config_id: {**effective_binding, 'verified': False, 'conflicts_checked': False}}}
+    data['enabled'] = bool(old and old.enabled and not source_change and not helper_change)
     await _persist(hass, config_id, data, patch)
     await _replace_runtime(hass, config_id, data, blueprint)
     return _read(hass, config_id)
@@ -223,7 +230,60 @@ async def async_save_config(hass, config, metadata, expected_revision, *, fix_mi
         return await _save_locked(hass, config, metadata, expected_revision, fix_mismatch=fix_mismatch, quick_actions=quick_actions, selector_actions=selector_actions)
 
 
-async def async_set_enabled(hass, config_id, enabled, expected_revision, conflict_check=False):
+def _mqtt_topics(blueprint, identifier):
+    if not identifier or not getattr(blueprint, 'is_mqtt', False):
+        return set()
+    if uses_zigbee2mqtt_action_topic(blueprint):
+        return {identifier, identifier.removesuffix('/action')}
+    return {identifier}
+
+
+def _uses_controller(triggers, topics, device_id):
+    if isinstance(triggers, list):
+        return any(_uses_controller(trigger, topics, device_id) for trigger in triggers)
+    if not isinstance(triggers, dict) or triggers.get('enabled') is False:
+        return False
+    platform = triggers.get('trigger', triggers.get('platform'))
+    if platform == 'mqtt':
+        topic = triggers.get('topic')
+        return isinstance(topic, str) and topic in topics
+    if platform == 'device':
+        return triggers.get('device_id') == device_id
+    return _uses_controller(triggers.get('triggers'), topics, device_id)
+
+
+def _has_activation_conflict(hass, configs, config_id, blueprint, identifier, device_id):
+    topics = _mqtt_topics(blueprint, identifier)
+    for key, other in configs.items():
+        if str(key) != str(config_id) and other.enabled and (
+            topics & _mqtt_topics(other.blueprint, other.identifier)
+            or (other.identifier == identifier and getattr(other.blueprint, 'event_type', None) == blueprint.event_type)
+        ):
+            return True
+    # Loaded automations expose raw_config through Home Assistant's automation/config API.
+    component = hass.data.get(getattr(automation, 'DATA_COMPONENT', automation.DOMAIN))
+    for entity in getattr(component, 'entities', ()):
+        if not hass.states.is_state(entity.entity_id, 'on'):
+            continue
+        raw = entity.raw_config or {}
+        if _uses_controller(raw.get('triggers', raw.get('trigger')), topics, device_id):
+            return True
+    return False
+
+
+async def _matches_detected_controller(hass, device_id, blueprint_id, identifier):
+    from .inventory import async_snapshot
+
+    inventory = await async_snapshot(hass)
+    if inventory['warnings']:
+        return False
+    controller = next((item for item in inventory['controllers'] if item['device_id'] == device_id), {})
+    suggestion = controller.get('blueprint_suggestion') or {}
+    return (suggestion.get('reason') in ('model', 'mode', 'gestures')
+            and suggestion.get('id') == blueprint_id and suggestion.get('identifier') == identifier)
+
+
+async def async_set_enabled(hass, config_id, enabled, expected_revision, conflict_check=False, *, manual_confirmation=None):
     metadata, store, configs = _objects(hass)
     async with metadata.config_lock:
         _check_revision(hass, config_id, expected_revision)
@@ -240,18 +300,32 @@ async def async_set_enabled(hass, config_id, enabled, expected_revision, conflic
             await configs[str(config_id)].start()
             return _read(hass, config_id)
         data, blueprint = await _validate(hass, current['config'])
-        patch = {}
-        if enabled:
-            binding = current['metadata'] or {}
-            if not binding.get('verified') or not conflict_check or not data['identifier'] or dr.async_get(hass).async_get(binding.get('device_id')) is None:
+        binding = current['metadata'] or {}
+        device_id = binding.get('device_id')
+        if not device_id or not data['identifier'].strip():
+            raise FarhomeError('activation_blocked', 'Verifica dispositivo, blueprint e identificatore prima di attivare.')
+        controller = metadata.snapshot()['controllers'].get(device_id, {})
+        external = controller.get('external_automations', [])
+        if manual_confirmation is None:
+            if not binding.get('verified') or not conflict_check:
                 raise FarhomeError('activation_blocked', 'Verifica dispositivo, blueprint e gestori concorrenti prima di attivare.')
-            controller = metadata.snapshot()['controllers'].get(binding['device_id'], {})
-            for entity_id in controller.get('external_automations', []):
-                state = hass.states.get(entity_id)
-                if state is None or state.state != 'off':
-                    raise FarhomeError('activation_blocked', 'Un’automazione esterna risulta attiva o non verificabile.')
-            patch = {'bindings': {str(config_id): {**binding, 'conflicts_checked': True}}, 'controllers': {binding['device_id']: {**controller, 'management': 'unknown'}}}
-        data['enabled'] = bool(enabled)
+        elif not manual_confirmation:
+            matched = controller.get('management') != 'external' and not external and await _matches_detected_controller(
+                hass, device_id, blueprint.id, data['identifier'],
+            )
+        # Check active handlers after the awaited inventory read, just before committing.
+        if dr.async_get(hass).async_get(device_id) is None:
+            raise FarhomeError('activation_blocked', 'Il dispositivo associato non esiste più.')
+        if any(not hass.states.is_state(entity_id, 'off') for entity_id in external):
+            raise FarhomeError('activation_blocked' if manual_confirmation is None else 'activation_conflict',
+                               'Un’automazione esterna risulta attiva o non verificabile.')
+        if _has_activation_conflict(hass, configs, config_id, blueprint, data['identifier'], device_id):
+            raise FarhomeError('activation_conflict', 'Un altro gestore attivo usa questi eventi.')
+        if manual_confirmation is False and not matched:
+            raise FarhomeError('activation_confirmation_required')
+        patch = {'bindings': {str(config_id): {**binding, 'verified': True, 'conflicts_checked': True}},
+                 'controllers': {device_id: {**controller, 'management': 'unknown'}}}
+        data['enabled'] = True
         await _persist(hass, str(config_id), data, patch)
         await _replace_runtime(hass, str(config_id), data, blueprint)
         return _read(hass, config_id)
