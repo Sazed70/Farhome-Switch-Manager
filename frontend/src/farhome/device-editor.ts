@@ -48,6 +48,23 @@ export class FarhomeDeviceEditor extends LitElement{
   private token=0;
   private text=(key:TextKey)=>t(this.hass?.language,key);
   private get api(){return new FarhomeApi(this.hass);}
+  private blueprintHint(){
+    const suggestion=this.controller.blueprint_suggestion;
+    const assigned=this.blueprint;
+    if(!suggestion){
+      if(assigned)return html`<p class="muted">${this.text('blueprint_assigned')} · ${assigned.name}</p>`;
+      return this.controller.config_ids.length?nothing:html`<p class="muted">${this.text('blueprint_no_suggestion')}</p>`;
+    }
+    const reason=suggestion.reason==='mode'
+      ? `${this.text('blueprint_mode_match')} «${suggestion.mode}».`
+      : this.text(suggestion.reason==='gestures'?'blueprint_gesture_match':'blueprint_model_match');
+    return html`<div class="notice">
+      <h3>${this.text('blueprint_suggested')}</h3>
+      <p><strong>${suggestion.name}</strong></p>
+      <p class="muted">${reason}</p>
+      ${assigned?html`<p>${this.text('blueprint_assigned')} · ${assigned.name}</p>`:nothing}
+    </div>`;
+  }
   get hasDirty(){return this.dirty||this.helperDirty;}
   get hasHelperDirty(){return this.helperDirty;}
   get saving(){return this.busy||this.helperBusy;}
@@ -174,6 +191,7 @@ export class FarhomeDeviceEditor extends LitElement{
     const blueprint=this.blueprint;const action=this.action;const quick=this.currentQuick;const selector=action&&parseSelectorAction(action);
     return html`<section class="stack" aria-label=${this.controller.name}>
       <header class="device-heading"><farhome-thumbnail large .asset=${this.controller.image}></farhome-thumbnail><div><h2>${this.controller.name}</h2><p class="muted">${this.controller.manufacturer} ${this.controller.model}</p><p class="status">${this.text(this.controller.management==='farhome'?'managed':this.controller.management==='external'?'external':'unknown')} · ${this.text(this.controller.compatibility==='verified'?'verified':'unverified')}</p></div></header>
+      ${this.blueprintHint()}
       ${this.error?html`<div class="notice" role="alert">${this.error}${!this.draft?html` <button @click=${()=>this.pickedConfig?this.load(this.pickedConfig):this.loadBlueprints()}>${this.text('retry')}</button>`:nothing}</div>`:nothing}
       ${this.loading?html`<p role="status">${this.text('loading')}</p>`:nothing}
       ${this.controller.config_ids.length>1?html`<label>${this.text('configuration')}<select .value=${this.pickedConfig} ?disabled=${this.dirty||this.busy} @change=${(e:Event)=>{this.pickedConfig=(e.target as HTMLSelectElement).value;if(this.pickedConfig)this.load(this.pickedConfig);}}><option value="">${this.text('choose_configuration')}</option>${this.controller.config_ids.map(id=>html`<option value=${id}>${id}</option>`)}</select></label>`:nothing}

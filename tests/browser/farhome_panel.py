@@ -29,6 +29,16 @@ try:
         expect(page.get_by_text('Nessun pulsante in questa stanza.')).to_be_visible()
         page.get_by_role('button', name='Senza stanza', exact=True).first.click()
         expect(page.locator('[data-device="none"]')).to_be_visible()
+        page.evaluate("""() => {
+            const device = fixture.controllers.find(d => d.device_id === 'none');
+            device.blueprint_suggestion = {id:'synthetic',name:'Synthetic knob',reason:'mode',mode:'event'};
+            return panel.refresh();
+        }""")
+        page.locator('[data-device="none"]').click()
+        expect(page.get_by_role('heading', name='Blueprint suggerito')).to_be_visible()
+        expect(page.get_by_text('Synthetic knob', exact=True)).to_be_visible()
+        expect(page.get_by_label('Modello / blueprint')).to_have_value('')
+        assert not page.evaluate("calls.some(x=>x.type.endsWith('/config/save'))")
         page.get_by_role('button', name='Studio', exact=True).click()
         page.locator('[data-device="many"]').click()
         expect(page.get_by_label('Configurazione')).to_be_visible()
