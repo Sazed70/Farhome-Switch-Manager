@@ -75,6 +75,8 @@ Playwright Chromium o l’eseguibile `FARHOME_BROWSER`. Importano il bundle real
 simulano solo dati/trasporto HA. Il server è temporaneo e limitato a loopback.
 Screenshot temporanei a 1440/390/320 px, temi chiaro/scuro. La CI esegue entrambe
 le suite, compreso ricaricamento del vero Store HA e del helper input_select.
+Il job Python usa Ubuntu 24.04, per cui GitHub Actions distribuisce Python 3.14.2,
+e basa la cache su `requirements-test.txt`.
 
 Prove locali dopo la revisione indipendente: 57 test Python, 11 test Node, controllo
 TypeScript, build e due suite browser. Le regressioni aggiunte verificano che il
@@ -126,3 +128,7 @@ ricontrollati dopo aggiornamenti HA. Gli endpoint sono amministrativi.
 
 Questa procedura non è stata eseguita. Il dominio resta `switch_manager`: fork e
 originale non sono due integrazioni indipendenti nella stessa istanza.
+
+La verifica HACS ereditata controlla anche i requisiti per la pubblicazione nel
+catalogo. Sul fork segnala che mancano i topic richiesti e che le issue sono
+disabilitate. Queste condizioni riguardano la pubblicazione nel catalogo.
