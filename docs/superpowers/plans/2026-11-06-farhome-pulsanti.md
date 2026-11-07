@@ -135,8 +135,6 @@ Modifiche limitate all'integrazione: `__init__.py`, `connections.py`, `view.py`,
 
 Copertura: inventario/stanze/associazioni/miniature Task1+5; metadati e concorrenza Task1+2; gesti multidominio e avanzato Task3+5; helper/selettore persistente Task4+6; accessibilità, build e attribuzioni Task5+7. I cinque rischi di Review Focus hanno ciascuno test nominati nei relativi task. La struttura non richiede nuovi framework UI, sostituzione del motore eventi o accesso all'istanza reale.
 
-Piano pronto per la scelta del metodo di esecuzione; nessuna implementazione iniziata. Raccomandazione: esecuzione nativa in questa chat con revisione indipendente finale, perché DTO e salvataggi sono condivisi e le sette attività sono prevalentemente sequenziali.
+## Stato di esecuzione — 7 novembre 2026
 
-## Stato di esecuzione — 6 novembre 2026
-
-Metodo scelto: esecuzione diretta in questa chat, checkout isolato sul ramo work/farhome-panel. Attività 1–6 implementate e verificate; attività 7: verifica finale e revisione indipendente in corso. Non installato su HA e nessuna migrazione reale eseguita. Questo piano conserva il testo operativo originale come tracciato di progetto; lo stato attuale è documentato in docs/farhome/testing-and-migration.md.
+Il lavoro è stato eseguito direttamente in chat su un checkout isolato del ramo `work/farhome-panel`. La revisione indipendente e le regressioni finali coprono conservazione dei parametri, protezione della bozza durante il salvataggio e aggiornamento della luce attiva. Il collaudo fisico e la migrazione restano attività future. Le prove e i limiti sono descritti nella [guida di verifica](../../farhome/testing-and-migration.md).

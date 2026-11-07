@@ -37,11 +37,18 @@ export class FarhomeSelectorEditor extends LitElement{
   private validDraft(){const value=this.snapshot;if(!value)return false;const initial=this.initial??value.initial;return this.options.length>0&&new Set(this.options).size===this.options.length&&this.options.every(id=>/^light\.[a-z0-9_]+$/.test(id)&&!!this.hass.states[id])&&this.options.includes(this.active??value.active)&&(initial===null||this.options.includes(initial));}
   private move(index:number,delta:number){const options=[...this.options];[options[index],options[index+delta]]=[options[index+delta],options[index]];this.options=options;this.emitDirty(true);this.updateComplete.then(()=>this.renderRoot.querySelector<HTMLButtonElement>(`[data-option="${options[index+delta]}"] [data-direction="${delta}"]`)?.focus());}
   private async apply(){if(!this.editable||!this.snapshot||!this.validDraft()||this.busy||(!this.ack&&this.snapshot.known_references.length>1))return;this.busy=true;this.error='';this.emitDirty(true);try{const value=await this.api.updateSelector(this.snapshot,this.configId,this.options,this.active,this.initial,this.ack);this.adopt(value);this.applied=true;}catch(err){this.error=(err as Error).message||this.text('load_error');}finally{this.busy=false;this.dispatchEvent(new CustomEvent('helper-dirty-changed',{detail:{dirty:this.dirty,busy:false},bubbles:true,composed:true}));}}
-  render(){const value=this.snapshot;return html`<div class="stack">
+  render(){
+    const value=this.snapshot;
+    const helper=this.hass.states[this.entityId];
+    const active=helper?.state;
+    const target=active?this.hass.states[active]:undefined;
+    const options=helper?.attributes.options;
+    const available=!!target&&target.state!=='unavailable'&&target.state!=='unknown'&&Array.isArray(options)&&options.includes(active);
+    return html`<div class="stack">
     ${this.loading?html`<p role="status">${this.text('loading')}</p>`:nothing}
     ${this.error?html`<p class="notice" role="alert">${this.error}</p>`:nothing}
     ${value?html`
-      <div><h3>${this.text('active_light')}</h3><p>${this.options.includes(value.active)&&this.hass.states[value.active]?.state!=='unavailable'?this.name(value.active):this.text('active_missing')} <small>${value.active}</small></p></div>
+      <div><h3>${this.text('active_light')}</h3><p>${available?this.name(active!):this.text('active_missing')} <small>${active}</small></p></div>
       ${!this.editable?html`<p class="notice">${this.text(value.origin==='yaml_or_unknown'?'yaml_readonly':'controller_readonly')}</p>`:nothing}
       <h3>${this.text('ordered_lights')}</h3><ol>${this.options.map((id,index)=>html`<li data-option=${id}><div class="light-name"><span>${this.name(id)}</span><small>${id}${!this.hass.states[id]||this.hass.states[id].state==='unavailable'?' · '+this.text('unavailable'):''}</small></div>${this.editable?html`<div class="list-actions"><button data-direction="-1" aria-label=${this.text('up')+' '+this.name(id)} ?disabled=${this.busy||index===0} @click=${()=>this.move(index,-1)}><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m6 14 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><button data-direction="1" aria-label=${this.text('down')+' '+this.name(id)} ?disabled=${this.busy||index===this.options.length-1} @click=${()=>this.move(index,1)}><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m6 10 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><button aria-label=${this.text('remove')+' '+this.name(id)} ?disabled=${this.busy} @click=${()=>{this.options=this.options.filter(item=>item!==id);this.emitDirty(true);}}>${this.text('remove')}</button></div>`:nothing}</li>`)}</ol>
       ${this.editable?html`

@@ -131,7 +131,11 @@ try:
         page.get_by_role('button', name='Ricarica elenco', exact=True).click()
         expect(page.get_by_text('Definito in YAML o origine non risolta: elenco in sola lettura.')).to_be_visible()
         expect(page.get_by_role('button', name='Applica elenco', exact=True)).to_have_count(0)
-        page.evaluate("helper.origin='ui';helper.editable=true;helper.active='unknown';helper.known_references.push({type:'automation',id:'automation.shared'})")
+        page.evaluate("""() => {
+            helper.origin='ui';helper.editable=true;helper.active='unknown';
+            helper.known_references.push({type:'automation',id:'automation.shared'});
+            testHass.states[helper.entity_id].state='unknown';
+        }""")
         page.get_by_role('button', name='Ricarica elenco', exact=True).click()
         expect(page.get_by_text('Destinatario attivo non disponibile')).to_be_visible()
         page.get_by_role('button', name='Sposta giù Soffitto', exact=True).click()
@@ -156,6 +160,57 @@ try:
         page.evaluate('window.failRead=false')
         page.get_by_role('button', name='Riprova', exact=True).click()
         expect(page.locator('[data-device="knob"]')).to_be_visible()
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.goto(f'http://127.0.0.1:{server.server_port}/tests/browser/harness.html')
+        expect(page.locator('[data-device="knob"]')).to_be_visible()
+        page.evaluate("""() => {
+            const config = configs['1'];
+            config.blueprint.buttons[0].actions[0].release_index = 1;
+            config.buttons[0].actions[0] = {
+                mode: 'restart', loop: true, loop_interval: 800,
+                sequence: [{action: 'light.turn_on', target: {entity_id: 'light.desk'},
+                            data: {brightness_step_pct: 15, transition: 0.5}}]
+            };
+            fixture.metadata.bindings['1'].selector_helper = 'input_select.lights';
+        }""")
+        page.locator('[data-device="knob"]').click()
+        page.get_by_label('Destinatario', exact=True).select_option('light.extra')
+        expect(page.get_by_label('Passo luminosità (%)')).to_have_value('15')
+        page.get_by_label('Funzione', exact=True).select_option('decrease')
+        page.get_by_role('button', name='Usa selettore per questo gesto', exact=True).click()
+        page.locator('[data-gesture="0:2"]').click()
+        expect(page.get_by_role('button', name='Conferma gesto selettore', exact=True)).to_have_count(0, timeout=1500)
+        page.locator('[data-gesture="0:0"]').click()
+        page.get_by_role('button', name='Usa selettore per questo gesto', exact=True).click()
+        page.evaluate('window.delaySave=true')
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        page.wait_for_function("typeof window.releaseSave === 'function'")
+        confirm_disabled = page.get_by_role('button', name='Conferma gesto selettore', exact=True).is_disabled()
+        page.evaluate('releaseSave()')
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        quick = page.evaluate("calls.find(x=>x.type.endsWith('/config/save')).quick_actions[0].value")
+        errors = []
+        if not confirm_disabled:
+            errors.append('Selector confirmation was enabled during save')
+        for key, expected in {'entity_id': 'light.extra', 'kind': 'decrease', 'step': 15, 'transition': 0.5, 'loop': True, 'loop_interval': 800}.items():
+            if quick.get(key) != expected:
+                errors.append(f'Target edit changed {key}: {quick.get(key)!r}')
+        assert not errors, errors
+        active_summary = page.get_by_role('heading', name='Luce attiva', exact=True).locator('..').locator('p')
+        expect(active_summary).to_contain_text('light.desk')
+        page.evaluate("""() => {
+            const states = {...testHass.states};
+            states['light.ceiling'] = {...states['light.ceiling'], state: 'on'};
+            states['input_select.lights'] = {...states['input_select.lights'], state: 'light.ceiling'};
+            panel.hass = {...testHass, states};
+        }""")
+        expect(active_summary).to_contain_text('Soffitto light.ceiling', timeout=1500)
+        page.evaluate("""() => {
+            const states = {...panel.hass.states};
+            delete states['input_select.lights'];
+            panel.hass = {...panel.hass, states};
+        }""")
+        expect(active_summary).to_contain_text('Destinatario attivo non disponibile')
         assert not page.evaluate("calls.some(x=>x.type==='call_service')")
         print(json.dumps({'product_components': 'passed', 'themes': 2, 'widths': [1440, 390, 320], 'load_actuations': 0}))
         browser.close()

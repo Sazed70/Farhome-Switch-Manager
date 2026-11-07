@@ -1,6 +1,6 @@
 # Pannello Pulsanti: verifica e migrazione futura
 
-Stato al 6 novembre 2026: implementazione di sviluppo sul ramo `work/farhome-panel`.
+Stato al 7 novembre 2026: implementazione di sviluppo sul ramo `work/farhome-panel`.
 Non installata su Home Assistant domestico. Nessuna release applicativa.
 
 ## Comportamento implementato
@@ -76,8 +76,11 @@ simulano solo dati/trasporto HA. Il server è temporaneo e limitato a loopback.
 Screenshot temporanei a 1440/390/320 px, temi chiaro/scuro. La CI esegue entrambe
 le suite, compreso ricaricamento del vero Store HA e del helper input_select.
 
-Prove locali: 57 test Python, 11 test Node, controllo TypeScript, build e due suite
-browser superati prima della revisione finale. I test coprono scritture fallite,
+Prove locali dopo la revisione indipendente: 57 test Python, 11 test Node, controllo
+TypeScript, build e due suite browser. Le regressioni aggiunte verificano che il
+cambio di destinatario conservi i parametri del gesto, che la conferma del
+selettore sia disabilitata durante un salvataggio e si chiuda al cambio di gesto,
+e che il riepilogo segua lo stato corrente dell’helper. I test coprono anche scritture fallite,
 conflitti tra editor, metadati, indici, capacità, persistenza nativa, helper YAML,
 dipendenze note, stato parziale, nomi lunghi/HTML e navigazione mobile. Il motore
 Script HA viene provato con servizi simulati: nessun carico reale è comandato.
