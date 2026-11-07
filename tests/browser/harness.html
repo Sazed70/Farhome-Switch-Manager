@@ -21,6 +21,14 @@ window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',stat
   if(msg.type.endsWith('/snapshot')){if(failRead)throw {code:'read_error',message:'Lettura non riuscita'};return structuredClone(fixture);}
   if(msg.type==='switch_manager/blueprints')return {blueprints,blueprint};
   if(msg.type.endsWith('/config/get'))return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:structuredClone(fixture.metadata.bindings[msg.config_id]||{device_id:fixture.controllers.find(x=>x.config_ids.includes(msg.config_id))?.device_id,verified:true}),revision:'config-'+counter};
+  if(msg.type==='switch_manager/config/delete'){
+    if(msg.expected_revision!=='config-'+counter)throw {code:'conflict'};
+    delete configs[msg.config_id];
+    delete fixture.metadata.bindings[msg.config_id];
+    for(const device of fixture.controllers)device.config_ids=device.config_ids.filter(id=>id!==msg.config_id);
+    counter++;
+    return {deleted:msg.config_id};
+  }
   if(msg.type.endsWith('/config/save')){
     if(delaySave)await new Promise(resolve=>window.releaseSave=resolve);
     if(failSave)throw {code:failSave===true?'conflict':failSave,message:'Configurazione modificata altrove. Ricarica prima di salvare.'};

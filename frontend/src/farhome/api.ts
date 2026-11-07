@@ -6,6 +6,9 @@ export class FarhomeApi {
   constructor(private hass:HomeAssistant){}
   snapshot():Promise<Snapshot>{return this.hass.callWS({type:'switch_manager/farhome/snapshot'});}
   get(config_id:string):Promise<ConfigEnvelope>{return this.hass.callWS({type:'switch_manager/farhome/config/get',config_id});}
+  deleteConfig(config_id:string,expected_revision:string):Promise<{deleted:string}>{
+    return this.hass.callWS({type:'switch_manager/config/delete',config_id,expected_revision});
+  }
   save(config:EditableConfig,metadata:Binding|null|undefined,expected_revision:string|undefined,quick_actions:QuickPatch[]=[],selector_actions:SelectorPatch[]=[]):Promise<ConfigEnvelope>{
     return this.hass.callWS({type:'switch_manager/farhome/config/save',config:{...config,blueprint:typeof config.blueprint==='string'?config.blueprint:config.blueprint.id},metadata,expected_revision,quick_actions,selector_actions});
   }

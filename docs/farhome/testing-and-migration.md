@@ -36,6 +36,8 @@ Nessuna release applicativa.
   regole dei gesti corrispondono in modo univoco. Il cambio avviene nella bozza.
   Il salvataggio di un blueprint diverso disabilita la configurazione fino alla
   riattivazione esplicita.
+- **Elimina configurazione** rimuove la scheda Farhome selezionata e i suoi gesti.
+  La conferma mostra nome e ID, anche per le schede gestite esternamente.
 - Il selettore di luci può creare un helper input_select dal pannello o riusarne
   uno esistente. In una bozza puoi collegarlo e assegnare i gesti prima di salvare
   e attivare il pulsante. **Crea e collega** crea l’helper nella categoria **Farhome**
