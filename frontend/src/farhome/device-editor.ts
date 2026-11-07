@@ -69,13 +69,14 @@ export class FarhomeDeviceEditor extends LitElement{
   private async loadBlueprints(){try{const result=await this.hass.callWS<{blueprints:Record<string,Blueprint>}>({type:'switch_manager/blueprints'});this.blueprints=result.blueprints;}catch(err){this.error=this.message(err);}}
   private message(err:unknown){const value=err as {message?:string;code?:string};return value?.message||value?.code||this.text('load_error');}
   private adopt(value:ConfigEnvelope){
-    this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.conflictChecked=false;this.selected='0:0';this.showAdvanced=false;
+    this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.conflictChecked=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
   }
   async load(id:string){const token=++this.token;this.loading=true;this.error='';try{const value=await this.api.get(id);if(token===this.token)this.adopt(value);}catch(err){if(token===this.token)this.error=this.message(err);}finally{if(token===this.token)this.loading=false;}}
   private emitDirty(){this.dispatchEvent(new CustomEvent('dirty-changed',{detail:{dirty:this.hasDirty},bubbles:true,composed:true}));}
   private markDirty(value=true){this.dirty=value;this.saved=false;this.emitDirty();}
   private changed(){this.draft={...this.draft!};this.markDirty();}
   private setQuick(value:QuickAction){
+    if(this.busy||this.readonly)return;
     this.quick.set(this.selected,value);
     this.selectors.delete(this.selected);
     try{const [b,a]=this.indices;this.draft!.buttons[b].actions[a]=buildQuickAction(value);this.error='';}catch{this.error=this.text('invalid_form');}
@@ -91,9 +92,26 @@ export class FarhomeDeviceEditor extends LitElement{
     const domain=(entity?.entity_id.split('.')[0]||'light') as Domain;
     this.setQuick({domain,entity_id:entity?.entity_id||'',kind:entity?supportedQuickActions(entity,this.hass.services)[0].kind:'on',mode:(this.action?.mode||'restart') as ScriptMode});
   }
-  private changeTarget(value:QuickAction,entity_id:string){const entity=this.hass.states[entity_id];const kinds=supportedQuickActions(entity,this.hass.services);const kind=kinds.some(x=>x.kind===value.kind)?value.kind:kinds[0]?.kind||'on';this.setQuick({domain:entity_id.split('.')[0] as Domain,entity_id,kind,mode:value.mode,...(['increase','decrease'].includes(kind)?{step:10}:{} )});}
-  private selectDomain(value:QuickAction,domain:Domain){const entity=Object.values(this.hass.states).find(entity=>entity.entity_id.startsWith(domain+'.')&&supportedQuickActions(entity,this.hass.services).length);if(entity)this.changeTarget(value,entity.entity_id);else this.setQuick({domain,entity_id:'',kind:domain==='scene'?'activate':domain==='script'?'run':'on',mode:value.mode});}
-  private changeKind(value:QuickAction,kind:QuickAction['kind']){this.setQuick({domain:value.domain,entity_id:value.entity_id,mode:value.mode,kind,...(['increase','decrease'].includes(kind)?{step:10}:{} )});}
+  private changeTarget(value:QuickAction,entity_id:string){
+    this.setQuick({...value,entity_id});
+  }
+  private selectDomain(value:QuickAction,domain:Domain){
+    const entity=Object.values(this.hass.states).find(item=>item.entity_id.startsWith(domain+'.')&&supportedQuickActions(item,this.hass.services).length);
+    const kind=supportedQuickActions(entity,this.hass.services)[0]?.kind??(domain==='scene'?'activate':domain==='script'?'run':'on');
+    const {step,transition,brightness_pct,color_temp_kelvin,percentage,...shared}=value;
+    this.setQuick({...shared,domain,entity_id:entity?.entity_id||'',kind,...(['increase','decrease'].includes(kind)?{step:10}:{})});
+  }
+  private changeKind(value:QuickAction,kind:QuickAction['kind']){
+    const {step,brightness_pct,color_temp_kelvin,percentage,...shared}=value;
+    const next:QuickAction={...shared,kind};
+    if(kind==='increase'||kind==='decrease')next.step=step??10;
+    if(value.domain==='light'&&(kind==='on'||kind==='toggle')){
+      if(brightness_pct!==undefined)next.brightness_pct=brightness_pct;
+      if(color_temp_kelvin!==undefined)next.color_temp_kelvin=color_temp_kelvin;
+    }
+    if(value.domain==='fan'&&kind==='on'&&percentage!==undefined)next.percentage=percentage;
+    this.setQuick(next);
+  }
   private advancedChanged(event:CustomEvent){if(this.busy||this.readonly||!Array.isArray(event.detail.value))return;const [b,a]=this.indices;this.draft!.buttons[b].actions[a]={...this.action!,sequence:structuredClone(event.detail.value)};this.quick.delete(this.selected);this.selectors.delete(this.selected);this.changed();}
   private numeric(label:TextKey,key:keyof QuickAction,value:QuickAction,min:number,max?:number,optional=false){return html`<label>${this.text(label)}<input type="number" min=${min} max=${max??nothing} step="any" .value=${String(value[key]??'')} ?required=${!optional} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{const input=e.target as HTMLInputElement;const next={...value};if(optional&&!input.value)delete next[key];else (next as any)[key]=input.valueAsNumber;this.setQuick(next);}}></label>`;}
   private quickForm(value:QuickAction){
@@ -142,14 +160,14 @@ export class FarhomeDeviceEditor extends LitElement{
       ${helper&&this.envelope?html`<farhome-selector-editor .hass=${this.hass} .entityId=${helper} .configId=${this.envelope.config_id} .allowed=${this.canLinkHelper&&!this.busy&&helper===this.envelope.metadata?.selector_helper} @helper-dirty-changed=${(e:CustomEvent)=>{this.helperDirty=e.detail.dirty;this.helperBusy=e.detail.busy;this.emitDirty();}}></farhome-selector-editor>`:nothing}
     </div></details>`;
   }
-  private applySelector(){const helper=this.binding?.selector_helper;if(!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,value);this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error=this.text('invalid_form');}}
+  private applySelector(){const helper=this.binding?.selector_helper;if(this.busy||this.readonly||!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,value);this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error=this.text('invalid_form');}}
   protected selectorGesture(){
     const helper=this.binding?.selector_helper;
     if(!helper||this.readonly||!this.action)return nothing;
     const configured=parseSelectorAction(this.action);
     return html`${configured?html`<p class="notice">${this.text('selector')} · ${configured.helper_id} · ${this.text(configured.kind==='next'?'next_light':configured.kind==='brightness_up'?'dim_up':'dim_down')}</p>`:nothing}
       <button ?disabled=${this.busy} @click=${()=>{this.selectorKind=configured?.kind||'next';this.selectorStep=configured?.step??10;this.selectorTransition=configured?.transition??.1;this.selectorPending=!this.selectorPending;}}>${this.text('use_selector')}</button>
-      ${this.selectorPending?html`<div class="notice stack"><p>${this.text('selector_summary')}</p><label>${this.text('selector_function')}<select aria-label=${this.text('selector_function')} @change=${(e:Event)=>this.selectorKind=(e.target as HTMLSelectElement).value as SelectorKind}>${(['next','brightness_up','brightness_down'] as SelectorKind[]).map(kind=>html`<option value=${kind} .selected=${kind===this.selectorKind}>${this.text(kind==='next'?'next_light':kind==='brightness_up'?'dim_up':'dim_down')}</option>`)}</select></label>${this.selectorKind!=='next'?html`<div class="fields"><label>${this.text('step_brightness')}<input type="number" min="0.1" max="100" step="any" .value=${String(this.selectorStep)} @input=${(e:Event)=>this.selectorStep=(e.target as HTMLInputElement).valueAsNumber}></label><label>${this.text('transition')}<input type="number" min="0" max="3600" step="any" .value=${String(this.selectorTransition)} @input=${(e:Event)=>this.selectorTransition=(e.target as HTMLInputElement).valueAsNumber}></label></div>`:nothing}<button @click=${this.applySelector}>${this.text('confirm_selector')}</button></div>`:nothing}`;
+      ${this.selectorPending?html`<div class="notice stack"><p>${this.text('selector_summary')}</p><label>${this.text('selector_function')}<select aria-label=${this.text('selector_function')} ?disabled=${this.busy} @change=${(e:Event)=>this.selectorKind=(e.target as HTMLSelectElement).value as SelectorKind}>${(['next','brightness_up','brightness_down'] as SelectorKind[]).map(kind=>html`<option value=${kind} .selected=${kind===this.selectorKind}>${this.text(kind==='next'?'next_light':kind==='brightness_up'?'dim_up':'dim_down')}</option>`)}</select></label>${this.selectorKind!=='next'?html`<div class="fields"><label>${this.text('step_brightness')}<input type="number" min="0.1" max="100" step="any" .value=${String(this.selectorStep)} ?disabled=${this.busy} @input=${(e:Event)=>this.selectorStep=(e.target as HTMLInputElement).valueAsNumber}></label><label>${this.text('transition')}<input type="number" min="0" max="3600" step="any" .value=${String(this.selectorTransition)} ?disabled=${this.busy} @input=${(e:Event)=>this.selectorTransition=(e.target as HTMLInputElement).valueAsNumber}></label></div>`:nothing}<button ?disabled=${this.busy} @click=${this.applySelector}>${this.text('confirm_selector')}</button></div>`:nothing}`;
   }
   render(){
     if(!this.controller)return nothing;
@@ -163,7 +181,7 @@ export class FarhomeDeviceEditor extends LitElement{
       ${!this.draft&&!this.loading&&!this.readonly&&(!this.controller.config_ids.length||this.preparing)?html`<form class="stack" @submit=${(e:Event)=>{e.preventDefault();this.createDraft();}}><p>${this.text('no_config')}</p><label>${this.text('name')}<input required maxlength="255" .value=${this.newName} @input=${(e:Event)=>{this.newName=(e.target as HTMLInputElement).value;this.markDirty();}}></label><label>${this.text('blueprint')}<select required .value=${this.newBlueprint} @change=${(e:Event)=>{this.newBlueprint=(e.target as HTMLSelectElement).value;this.markDirty();}}><option value="">${this.text('choose')}</option>${Object.values(this.blueprints).sort((a,b)=>a.name.localeCompare(b.name,this.hass.language)).map(value=>html`<option value=${value.id}>${value.service} · ${value.name}</option>`)}</select></label><label>${this.text('identifier')}<input required maxlength="1024" .value=${this.newIdentifier} @input=${(e:Event)=>{this.newIdentifier=(e.target as HTMLInputElement).value;this.markDirty();}}></label><button type="submit">${this.text('create_draft')}</button></form>`:nothing}
       ${this.draft?html`
         ${!blueprint?html`<p class="notice">${this.text('no_blueprint')}</p>`:html`
-          <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;return html`<button data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${item.title}</button>`;}))}</div>
+          <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;return html`<button data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;this.selectorPending=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${item.title}</button>`;}))}</div>
           ${action?html`<div class="gesture-editor stack"><h3>${blueprint.buttons[this.indices[0]].actions[this.indices[1]].title}</h3>
             ${quick&&!this.showAdvanced?this.quickForm(quick):selector&&!this.showAdvanced?nothing:html`<p>${this.text(action.sequence.length?'advanced':'no_action')}</p>${action.sequence.length?html`<p class="muted">${this.text('advanced_notice')}</p>`:nothing}`}
             ${this.selectorGesture()}
