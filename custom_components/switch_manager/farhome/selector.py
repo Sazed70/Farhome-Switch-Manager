@@ -6,13 +6,15 @@ from copy import deepcopy
 import re
 from types import SimpleNamespace
 
-from homeassistant.helpers import entity_registry as er, device_registry as dr
+from homeassistant.helpers import category_registry as cr, entity_registry as er, device_registry as dr
 from ..const import DOMAIN, CONF_MANAGED_SWITCHES
 from .config_service import FarhomeError
 from .types import revision
 
 HELPER = re.compile(r'^input_select\.[a-z0-9_]+$')
 LIGHT = re.compile(r'^light\.[a-z0-9_]+$')
+HELPER_CATEGORY_SCOPE = 'helpers'
+HELPER_CATEGORY_NAME = 'Farhome'
 
 
 async def _native_call(hass, command, **fields):
@@ -21,7 +23,7 @@ async def _native_call(hass, command, **fields):
     HA intentionally does not expose the input_select storage collection in
     hass.data. Fail closed if its registered API changes or isn't loaded.
     """
-    if command not in ('input_select/list', 'input_select/update'):
+    if command not in ('input_select/list', 'input_select/create', 'input_select/update'):
         raise FarhomeError('read_only')
     registered = hass.data.get('websocket_api', {}).get(command)
     if not registered:
@@ -43,6 +45,51 @@ async def _native_call(hass, command, **fields):
         raise
     except Exception as err:
         raise FarhomeError('helper_api_error', 'Impossibile completare la richiesta al gestore helper.') from err
+
+
+def validate_light_options(hass, options):
+    if (not isinstance(options, list) or not 1 <= len(options) <= 500
+            or any(not isinstance(value, str) or not LIGHT.fullmatch(value) or hass.states.get(value) is None for value in options)
+            or len(set(options)) != len(options)):
+        raise FarhomeError('validation_error', 'La lista deve contenere luci esistenti, senza duplicati.')
+
+
+async def async_create_selector(hass, name, options, initial=None):
+    name = name.strip()
+    if not name or len(name) > 255:
+        raise FarhomeError('validation_error', 'Nome non valido.')
+    async with hass.data[DOMAIN]['farhome'].config_lock:
+        validate_light_options(hass, options)
+        if initial is not None and initial not in options:
+            raise FarhomeError('validation_error', 'La luce iniziale deve essere nell’elenco.')
+        items = await _native_call(hass, 'input_select/list')
+        matches = [item for item in items if item['name'].casefold() == name.casefold()]
+        if matches:
+            if len(matches) != 1 or matches[0]['options'] != options or matches[0].get('initial') != initial:
+                raise FarhomeError('helper_name_exists')
+            # Retrying an interrupted create can attach the same helper.
+            item = matches[0]
+        else:
+            fields = {'name': name, 'options': options}
+            if initial is not None:
+                fields['initial'] = initial
+            item = await _native_call(hass, 'input_select/create', **fields)
+        registry = er.async_get(hass)
+        entity_id = registry.async_get_entity_id('input_select', 'input_select', item['id'])
+        if entity_id is None:
+            raise FarhomeError('helper_created_unavailable')
+        if not matches:
+            categories = cr.async_get(hass)
+            scope = HELPER_CATEGORY_SCOPE
+            category = next((entry for entry in categories.async_list_categories(scope=scope)
+                             if entry.name.casefold() == HELPER_CATEGORY_NAME.casefold()), None)
+            if category is None:
+                category = categories.async_create(scope=scope, name=HELPER_CATEGORY_NAME)
+            entry = registry.async_get(entity_id)
+            registry.async_update_entity(entity_id, categories={**entry.categories, scope: category.category_id})
+        if hass.states.get(entity_id) is None:
+            raise FarhomeError('helper_created_unavailable')
+        return {'entity_id': entity_id}
 
 
 def _references(hass, entity_id):
@@ -107,8 +154,7 @@ async def async_update_selector(hass, entity_id, options, active, initial, expec
                 raise FarhomeError('read_only', 'Helper YAML o controller non ancora migrato.')
             if len(before['known_references']) > 1 and not dependencies_acknowledged:
                 raise FarhomeError('dependencies_acknowledgment_required', 'Conferma i riferimenti condivisi conosciuti.')
-            if not isinstance(options, list) or not options or len(options) > 500 or any(not isinstance(value, str) or not LIGHT.fullmatch(value) or hass.states.get(value) is None for value in options) or len(set(options)) != len(options):
-                raise FarhomeError('validation_error', 'La lista deve contenere luci esistenti, senza duplicati.')
+            validate_light_options(hass, options)
             for value, previous in ((active, before['active']), (initial, before['initial'])):
                 if value is not None and (not isinstance(value, str) or value not in options):
                     raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
@@ -161,8 +207,8 @@ async def apply_selector_actions(hass, config, binding, patches):
     if not isinstance(patches, list) or len(patches) > 100:
         raise FarhomeError('validation_error', 'Gesti selettore non validi.')
     snapshot = await async_read_selector(hass, helper, config_id=config.get('id')) if patches else None
-    if snapshot and any(not LIGHT.fullmatch(value) or hass.states.get(value) is None for value in snapshot['options']):
-        raise FarhomeError('validation_error', 'Il selettore deve contenere solo luci esistenti.')
+    if snapshot:
+        validate_light_options(hass, snapshot['options'])
     seen = set()
     for patch in patches:
         try:

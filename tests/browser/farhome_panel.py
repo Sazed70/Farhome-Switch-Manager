@@ -145,7 +145,7 @@ try:
         # Helper edits have their own draft and commit, independent of gestures.
         page.get_by_text('Selettore di luci', exact=True).first.click()
         page.get_by_label('Helper luci').select_option('input_select.lights')
-        page.get_by_role('button', name='Collega helper', exact=True).click()
+        page.get_by_role('button', name='Collega helper esistente', exact=True).click()
         page.evaluate('window.delaySave=false')
         page.get_by_role('button', name='Salva gesti', exact=True).click()
         expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
@@ -287,6 +287,70 @@ try:
         expect(page.get_by_text('Nessuna istanza Zigbee2MQTT rilevata.')).to_be_visible()
         page.evaluate("panel.hass = {...panel.hass, language:'en'}")
         expect(page.get_by_text('No Zigbee2MQTT instance detected.')).to_be_visible()
+        page.evaluate("window.delaySave=false; mount('/rooms/_no_area/device/none')")
+        page.get_by_label('Nome', exact=True).fill('Nuovo pulsante')
+        page.get_by_label('Modello / blueprint').select_option('synthetic')
+        page.get_by_label('Identificatore eventi', exact=True).fill('z2m/new/action')
+        page.get_by_role('button', name='Crea bozza disabilitata', exact=True).click()
+        page.get_by_text('Selettore di luci', exact=True).first.click()
+        page.get_by_label('Helper luci').select_option('input_select.lights')
+        page.get_by_role('button', name='Collega helper esistente', exact=True).click()
+        expect(page.get_by_role('button', name='Usa selettore per questo gesto', exact=True)).to_be_visible()
+        page.get_by_role('button', name='Crea nuovo elenco', exact=True).click()
+        page.get_by_label('Nome elenco luci').fill('Luci della bozza')
+        for entity in ('light.desk', 'light.ceiling'):
+            page.get_by_label('Luce da aggiungere').select_option(entity)
+            page.get_by_role('button', name='Aggiungi luce', exact=True).click()
+        page.get_by_role('button', name='Sposta su Soffitto', exact=True).click()
+        page.get_by_label('Luce iniziale').select_option('light.desk')
+        page.get_by_role('button', name='Crea e collega', exact=True).click()
+        expect(page.get_by_text('Salva gesti per registrare il collegamento.')).to_be_visible()
+        created = page.evaluate("calls.find(x=>x.type.endsWith('/selector/create'))")
+        assert (created['name'], created['options'], created['initial']) == ('Luci della bozza', ['light.ceiling', 'light.desk'], 'light.desk')
+        page.get_by_role('button', name='Usa selettore per questo gesto', exact=True).click()
+        page.get_by_role('button', name='Conferma gesto selettore', exact=True).click()
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1)")
+        assert saved['metadata']['selector_helper'] == 'input_select.draft_lights'
+        assert saved['selector_actions'][0]['kind'] == 'next'
+        assert saved['config']['enabled'] is False
+        page.get_by_role('button', name='Attiva configurazione', exact=True).click()
+        expect(page.get_by_role('button', name='Disattiva configurazione', exact=True)).to_be_visible()
+        assert page.evaluate("calls.filter(x=>x.type.endsWith('/config/enabled')).length") == 1
+        page.evaluate("""() => {
+            configs['1'].blueprint.buttons[0].actions[0].release_index = null;
+            configs['1'].buttons[0].actions[0].loop = false;
+            fixture.controllers.find(controller => controller.device_id === 'knob').blueprint_suggestion = {
+                id:'synthetic', name:'Synthetic knob', reason:'gestures'
+            };
+            return mount('/rooms/studio/device/knob');
+        }""")
+        expect(page.get_by_role('heading', name='Blueprint suggerito')).to_be_visible()
+        expect(page.get_by_text('Candidato basato sui gesti dichiarati da Zigbee2MQTT.', exact=False)).to_have_count(0)
+        page.get_by_text('Associazione e attivazione', exact=True).click()
+        page.get_by_role('button', name='Cambia blueprint', exact=True).click()
+        page.get_by_role('searchbox', name='Cerca blueprint').fill('command')
+        page.get_by_label('Modello / blueprint').select_option('synthetic-command')
+        preview = page.get_by_role('region', name='Anteprima cambio blueprint')
+        expect(preview.get_by_text('Tasto 1 · Doppia pressione', exact=True)).to_be_visible()
+        saved_count = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).length")
+        page.get_by_role('button', name='Applica cambio alla bozza', exact=True).click()
+        expect(page.locator('[data-gesture="0:1"]')).to_have_text('Tasto 1 · Pressione singola')
+        assert page.evaluate("configs['1'].blueprint.id") == 'synthetic'
+        assert page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).length") == saved_count
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        changed = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).config")
+        assert changed['id'] == '1' and changed['blueprint'] == 'synthetic-command'
+        assert changed['buttons'][0]['actions'][1]['sequence'][0]['action'] == 'light.turn_on'
+        expect(page.get_by_role('button', name='Attiva configurazione', exact=True)).to_be_visible()
+        page.get_by_text('Associazione e attivazione', exact=True).click()
+        page.get_by_role('button', name='Cambia blueprint', exact=True).click()
+        page.get_by_label('Modello / blueprint').select_option('acme-mx42')
+        page.get_by_role('button', name='Applica cambio alla bozza', exact=True).click()
+        expect(page.get_by_label('Identificatore eventi', exact=True)).to_have_value('')
+        assert page.evaluate("configs['1'].blueprint.id") == 'synthetic-command'
         assert not page.evaluate("calls.some(x=>x.type==='call_service')")
         print(json.dumps({'product_components': 'passed', 'themes': 2, 'widths': [1440, 390, 320], 'load_actuations': 0}))
         browser.close()

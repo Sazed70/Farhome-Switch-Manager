@@ -74,16 +74,19 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(b["config"]["enabled"])
         self.assertEqual(len(self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES]), 2)
 
-    async def test_linking_helper_requires_active_migrated_controller(self):
+    async def test_draft_can_save_helper_and_gesture_before_activation(self):
         self.hass.states.async_set('input_select.synthetic', 'light.a', {'options': ['light.a']})
-        initial = await self.create({'device_id': 'device', 'verified': True})
-        binding = {**initial['metadata'], 'selector_helper': 'input_select.synthetic'}
-        with self.assertRaisesRegex(ValueError, 'activation_blocked'):
-            await async_save_config(self.hass, initial['config'], binding, initial['revision'])
-        active = await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], True)
-        linked = await async_save_config(self.hass, active['config'], {**active['metadata'], 'selector_helper': 'input_select.synthetic'}, active['revision'])
+        self.hass.states.async_set('light.a', 'off')
+        binding = {'device_id': 'device', 'verified': False, 'selector_helper': 'input_select.synthetic'}
+        gesture = {'button': 0, 'action': 0, 'kind': 'next', 'step': 10, 'transition': .1, 'mode': 'restart'}
+        with patch('custom_components.switch_manager.farhome.selector.er.async_get', return_value=SimpleNamespace(async_get=lambda _: None)):
+            linked = await async_save_config(self.hass, self.draft(), binding, None, selector_actions=[gesture])
         self.assertFalse(linked['config']['enabled'])
         self.assertEqual(linked['metadata']['selector_helper'], 'input_select.synthetic')
+        sequence = linked['config']['buttons'][0]['actions'][0]['sequence']
+        self.assertEqual(sequence[0]['target']['entity_id'], 'input_select.synthetic')
+        active = await async_set_enabled(self.hass, linked['config_id'], True, linked['revision'], manual_confirmation=True)
+        self.assertTrue(active['config']['enabled'])
 
     async def test_stale_revision_rejected_after_legacy_save(self):
         initial = await self.create()
