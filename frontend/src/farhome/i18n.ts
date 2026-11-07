@@ -48,12 +48,15 @@ const extra={
   associate_device:['Dispositivo da associare','Device to associate'],link_config:['Collega configurazione','Link configuration'],
   no_unassociated:['Nessuna configurazione da associare.','No unassigned configurations.'],
   blueprint:['Modello / blueprint','Model / blueprint'],identifier:['Identificatore eventi','Event identifier'],name:['Nome','Name'],
+  blueprint_use:['Usa suggerimento','Use suggestion'],
+  blueprint_search:['Cerca blueprint','Search blueprints'],
+  blueprint_no_results:['Nessun blueprint corrispondente.','No matching blueprints.'],
   blueprint_suggested:['Blueprint suggerito','Suggested blueprint'],
   blueprint_assigned:['Blueprint associato','Assigned blueprint'],
   blueprint_model_match:['Corrisponde al modello rilevato da Zigbee2MQTT.','Matches the model detected by Zigbee2MQTT.'],
   blueprint_mode_match:['Corrisponde al modello e alla modalità Zigbee2MQTT','Matches the model and Zigbee2MQTT mode'],
   blueprint_mode_unknown:['La modalità Zigbee2MQTT non è ancora disponibile. Scegli il profilo in base alla modalità del dispositivo.','The Zigbee2MQTT mode is not available yet. Choose the profile for the device mode.'],
-  blueprint_if_event:['Se è in modalità event','If set to event mode'],
+  blueprint_if_event:['Se è in modalità eventi (event)','If set to event mode'],
   blueprint_if_command:['Se è in modalità a comandi','If set to command mode'],
   blueprint_gesture_match:['Candidato basato sui gesti dichiarati da Zigbee2MQTT. Verifica i gesti sul dispositivo.','Candidate based on gestures reported by Zigbee2MQTT. Verify the gestures on the device.'],
   blueprint_no_suggestion:['Nessun blueprint suggerito. Verifica il modello e la modalità prima di scegliere dal catalogo.','No blueprint suggested. Check the model and mode before choosing from the catalog.'],
@@ -71,6 +74,26 @@ const extra={
   enable:['Attiva configurazione','Enable configuration'],disable:['Disattiva configurazione','Disable configuration'],disabled:['Disabilitata','Disabled'],enabled:['Attiva','Enabled'],
   invalid_form:['Controlla destinatario, funzione e parametri prima di salvare.','Check target, function and parameters before saving.'],
   load_error:['Lettura non riuscita. Riprova.','Could not load. Try again.'],
+  save_error:['Salvataggio non riuscito.','Could not save.'],
+  activation_error:['Impossibile cambiare lo stato della configurazione.','Could not change the configuration status.'],
+  error_conflict:['I dati sono stati modificati altrove. Ricarica prima di riprovare.','The data changed elsewhere. Reload before trying again.'],
+  error_not_found:['L’elemento richiesto non è più disponibile.','The requested item is no longer available.'],
+  error_validation:['I dati non sono validi. Controlla la configurazione e riprova.','The data is invalid. Check the configuration and try again.'],
+  error_activation_blocked:['Controlla il dispositivo, il blueprint e le automazioni che usano gli stessi eventi. Il collegamento di un helper richiede una configurazione attiva e verificata.','Check the device, the blueprint and automations that use the same events. Linking a helper requires an active, verified configuration.'],
+  error_partial_write:['Le modifiche potrebbero essere state salvate solo in parte. Ricarica e verifica lo stato prima di riprovare.','Some changes may have been saved. Reload and check the current state before trying again.'],
+  error_read_only:['L’elemento è in sola lettura.','This item is read-only.'],
+  error_dependencies:['Conferma di aver controllato i riferimenti condivisi prima di applicare le modifiche.','Confirm that you checked the shared references before applying changes.'],
+  error_replacement:['Scegli le luci attiva e iniziale prima di rimuoverle dall’elenco.','Choose replacements for the active and initial lights before removing them.'],
+  error_helper:['Impossibile completare la richiesta al gestore degli helper.','Could not complete the request to the helper manager.'],
+  error_unauthorized:['Questa operazione richiede i permessi di amministratore.','This operation requires administrator permissions.'],
+  mqtt_unavailable:['MQTT non è disponibile.','MQTT is unavailable.'],
+  zigbee2mqtt_not_discovered:['Nessuna istanza Zigbee2MQTT rilevata.','No Zigbee2MQTT instance detected.'],
+  zigbee2mqtt_definitions_timeout:['Zigbee2MQTT non ha inviato tutti i dati dei dispositivi in tempo.','Zigbee2MQTT did not send all device data in time.'],
+  inventory_warning:['Alcuni dati dei dispositivi non sono disponibili.','Some device data is unavailable.'],
+  config_count_one:['configurazione','configuration'],config_count_many:['configurazioni','configurations'],
+  reference_automation:['Automazione','Automation'],reference_config:['Configurazione','Configuration'],
+  custom_zigbee2mqtt_image:['Zigbee2MQTT · Immagine personalizzata','Zigbee2MQTT · Custom image'],
+  mode_single:['Singola','Single'],mode_restart:['Riavvia','Restart'],mode_queued:['In coda','Queued'],mode_parallel:['In parallelo','Parallel'],
   no_blueprint:['Blueprint non disponibile: usa l’editor originale per riparare la configurazione.','Blueprint unavailable: use the original editor to repair the configuration.'],
   migration_draft:['Bozza Farhome disabilitata: nessun gestore esterno viene modificato.','Disabled Farhome draft: external handlers are unchanged.'],
   no_options:['Nessuna azione supportata per questo destinatario.','No supported action for this target.'],
@@ -78,7 +101,62 @@ const extra={
   empty_list:['Nessun controller rilevato. Puoi aggiungerne uno dal registro dispositivi.','No controllers detected. Add one from the device registry.'],
 } satisfies Record<string,readonly [string,string]>;
 export type TextKey=keyof typeof it|keyof typeof extra;
+export function uiLanguage(language:string|undefined):'it'|'en'{
+  return language?.toLowerCase().split('-')[0]==='it'?'it':'en';
+}
 export function t(language:string|undefined,key:TextKey):string{
-  const italian=language?.startsWith('it');
+  const italian=uiLanguage(language)==='it';
   return key in extra?extra[key as keyof typeof extra][italian?0:1]:(italian?it:en)[key as keyof typeof it];
+}
+
+const errorKeys:Record<string,TextKey>={
+  conflict:'error_conflict',not_found:'error_not_found',validation_error:'error_validation',
+  invalid_format:'error_validation',activation_blocked:'error_activation_blocked',
+  partial_write:'error_partial_write',persistence_failed:'save_error',read_only:'error_read_only',
+  dependencies_acknowledgment_required:'error_dependencies',replacement_required:'error_replacement',
+  helper_api_error:'error_helper',unauthorized:'error_unauthorized',
+};
+export function errorKey(error:unknown,fallback:TextKey):TextKey{
+  const code=(error as {code?:unknown}|null)?.code;
+  return typeof code==='string'&&Object.hasOwn(errorKeys,code)?errorKeys[code]:fallback;
+}
+export function warningKey(code:string):TextKey{
+  switch(code){
+    case 'mqtt_unavailable':
+    case 'zigbee2mqtt_not_discovered':
+    case 'zigbee2mqtt_definitions_timeout':
+      return code;
+    default:
+      return 'inventory_warning';
+  }
+}
+
+// Translate the catalog's gesture labels for display while keeping the blueprint payload intact.
+const gestures:Record<string,string>={
+  press:'Pressione singola','single press':'Pressione singola',single:'Pressione singola',
+  'press 2x':'Doppia pressione','double press':'Doppia pressione',double:'Doppia pressione',
+  'press 3x':'Tripla pressione','press 4x':'Quattro pressioni','press 5x':'Cinque pressioni',
+  'press >4x':'Più di quattro pressioni','press many times':'Pressioni ripetute',
+  hold:'Pressione prolungata',long:'Pressione prolungata','long press':'Pressione prolungata',
+  'hold (released)':'Rilascio dopo pressione prolungata',release:'Rilascio',released:'Rilascio',
+  'hold (1s)':'Pressione prolungata (1 s)','either hold':'Pressione prolungata di un tasto',
+  'hold (step down)':'Pressione prolungata per diminuire','hold (step up)':'Pressione prolungata per aumentare',
+  'press (delayed)':'Pressione ritardata','press (on)':'Pressione di accensione','press (off)':'Pressione di spegnimento',
+  'both press':'Pressione di entrambi i tasti','both press 2x':'Doppia pressione di entrambi i tasti',
+  'both press 3x':'Tripla pressione di entrambi i tasti','both hold':'Pressione prolungata di entrambi i tasti',
+  'both init':'Inizio della pressione di entrambi i tasti',init:'Inizio pressione',
+  rotate:'Rotazione','rotate right':'Rotazione oraria','rotate left':'Rotazione antioraria',
+  'rotate (stopped)':'Fine rotazione','rotate clockwise start':'Inizio rotazione oraria',
+  'rotate clockwise stop':'Fine rotazione oraria','rotate anti-clockwise start':'Inizio rotazione antioraria',
+  'rotate anti-clockwise stop':'Fine rotazione antioraria',
+  'brightness step up':'Aumento luminosità','brightness step down':'Riduzione luminosità',
+  'color temperature step up':'Aumento temperatura colore','color temperature step down':'Riduzione temperatura colore',
+  'saturation move':'Variazione saturazione','hue move':'Variazione tonalità','hue stop':'Fine variazione tonalità',
+  toggle:'Accensione / spegnimento','toggle s1':'Commutazione S1','toggle s2':'Commutazione S2',
+  on:'Accensione',off:'Spegnimento',shake:'Scuotimento',fast:'Veloce',slow:'Lento',start:'Avvio',
+  step:'Passo','step up':'Aumento','step down':'Riduzione',repeat:'Ripetizione',motion:'Movimento',person:'Presenza di una persona',
+};
+export function gestureTitle(language:string|undefined,title:string):string{
+  const key=title.trim().toLowerCase();
+  return uiLanguage(language)==='it'&&Object.hasOwn(gestures,key)?gestures[key]:title;
 }

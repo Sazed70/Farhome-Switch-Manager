@@ -3,7 +3,9 @@
 <style>body{margin:0;font:16px Roboto,Arial,sans-serif;--primary-color:#007a92;--primary-text-color:#202124;--secondary-text-color:#59636b;--primary-background-color:#f5f7f8;--card-background-color:#fff;--divider-color:#d6dce0;background:var(--primary-background-color);color:var(--primary-text-color)}body.dark{--primary-color:#6fd4e4;--primary-text-color:#e7edf0;--secondary-text-color:#b4bec5;--primary-background-color:#14191d;--card-background-color:#20272c;--divider-color:#43515a;color-scheme:dark}</style>
 <script type="module">
 import '../../custom_components/switch_manager/assets/switch_manager_panel.js';
-const blueprint={id:'synthetic',name:'Synthetic knob',service:'Zigbee2MQTT',has_image:false,buttons:[{actions:[{title:'Click'},{title:'Rotazione oraria'},{title:'Doppio click'},{title:'Pressione prolungata'}]},{actions:[{title:'Secondo tasto'}]}]};
+const blueprint={id:'synthetic',name:'Synthetic knob',service:'Zigbee2MQTT',has_image:false,buttons:[{actions:[{title:'press'},{title:'rotate right'},{title:'press 2x'},{title:'hold'}]},{actions:[{title:'release'}]}]};
+const commandBlueprint={...blueprint,id:'synthetic-command',name:'Synthetic command knob'};
+const otherBlueprint={...blueprint,id:'acme-mx42',name:'Acme switch',service:'Z-Wave JS'};
 const empty=()=>({mode:'restart',sequence:[],loop:false,loop_interval:250});
 const feedback={mode:'queued',sequence:[{action:'light.toggle',target:{entity_id:'light.desk'}},{delay:{milliseconds:500}},{action:'light.toggle',target:{entity_id:'light.desk'}}],loop:false,loop_interval:250};
 const config={id:'1',name:'Studio',enabled:true,identifier:'synthetic/studio/action',blueprint,rotate:0,variables:{},valid_blueprint:true,is_mismatch:false,buttons:[{actions:[empty(),empty(),feedback,empty()]},{actions:[empty()]}]};
@@ -16,7 +18,7 @@ window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',stat
   calls.push(structuredClone(msg));
   if(msg.type==='call_service')throw Error('Unexpected load actuation');
   if(msg.type.endsWith('/snapshot')){if(failRead)throw {code:'read_error',message:'Lettura non riuscita'};return structuredClone(fixture);}
-  if(msg.type==='switch_manager/blueprints')return {blueprints:{synthetic:blueprint},blueprint};
+  if(msg.type==='switch_manager/blueprints')return {blueprints:{synthetic:blueprint,'synthetic-command':commandBlueprint,'acme-mx42':otherBlueprint},blueprint};
   if(msg.type.endsWith('/config/get'))return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:structuredClone(fixture.metadata.bindings[msg.config_id]||{device_id:fixture.controllers.find(x=>x.config_ids.includes(msg.config_id))?.device_id,verified:true}),revision:'config-'+counter};
   if(msg.type.endsWith('/config/save')){
     if(delaySave)await new Promise(resolve=>window.releaseSave=resolve);

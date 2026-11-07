@@ -20,9 +20,10 @@ export interface EntityState {entity_id: string; state: string; attributes: Reco
 export type ServiceMap = Record<string, Record<string, {fields?: Record<string, any>; [key:string]: unknown}>>;
 export interface FarhomeHass extends HomeAssistant {states: Record<string, EntityState>; services: ServiceMap;}
 export interface ImageAsset {url: string; source_url: string; source_label: string;}
-export interface BlueprintSuggestion {
-  id:string;name:string;reason:'model'|'mode'|'gestures'|'mode_unknown';mode?:string;
-  alternative?:{id:string;name:string;mode:string};
+export interface BlueprintChoice {id:string;name:string;mode?:string;identifier?:string;}
+export interface BlueprintSuggestion extends BlueprintChoice {
+  reason:'model'|'mode'|'gestures'|'mode_unknown';
+  alternative?:BlueprintChoice;
 }
 export interface Controller {
   device_id: string; name: string; area_id: string|null;

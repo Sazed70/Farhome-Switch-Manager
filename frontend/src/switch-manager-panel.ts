@@ -3,6 +3,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { loadHaComponents } from "./load-ha-components";
 import type { HomeAssistant, Panel, Route } from "./types";
+import { t } from "./farhome/i18n.js";
 
 import "./switch-manager-index";
 import "./switch-manager-switch-editor";
@@ -57,7 +58,7 @@ export class SwitchManagerPanel extends LitElement {
 
   render() {
     if (!this._componentsLoaded) {
-      return html`<div class="loading">Loading…</div>`;
+      return html`<div class="loading" role="status">${t(this.hass?.language, "loading")}</div>`;
     }
     if ("action" in this._params) {
       return html`

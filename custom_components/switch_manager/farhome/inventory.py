@@ -1,6 +1,7 @@
 """Join HA registries with explicit associations; ambiguous matches stay visible."""
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 
@@ -22,20 +23,32 @@ EVENT_BLUEPRINTS = {
 }
 
 
-def _catalog_profile(blueprints, key, topic_format, mode=None):
+def _device_topic(item):
+    return f"{item['base_topic']}/{item['friendly_name']}"
+
+
+def _catalog_profile(blueprints, key, topic_format, device_topic, mode=None):
     blueprint = blueprints.get(key)
     if not blueprint or not blueprint.is_zigbee2mqtt or blueprint.mqtt_topic_format != topic_format:
         return None
     profile = {"id": key, "name": blueprint.name}
     if mode:
         profile["mode"] = mode
+    if device_topic:
+        identifier = device_topic + topic_format.partition("/+")[2]
+        if len(identifier) <= 1024:
+            profile["identifier"] = identifier
     return profile
 
 
-def _blueprint_suggestion(items, blueprints):
+def _blueprint_suggestion(items, blueprints, shared_topics):
     if len(items) != 1:
         return None
     item = items[0]
+    topic = _device_topic(item)
+    if (topic in shared_topics or not item["base_topic"].strip() or not item["friendly_name"].strip()
+            or any(char in topic for char in "+#\0\r\n")):
+        topic = None
     definition = item["definition"]
     model = definition.get("model")
     if not isinstance(model, str):
@@ -49,9 +62,9 @@ def _blueprint_suggestion(items, blueprints):
         event = None
         command = None
         if CLICK_GESTURES | {"rotate_left", "rotate_right"} <= actions:
-            event = _catalog_profile(blueprints, "zigbee2mqtt-moes-zg-101zd-event", event_topic, "event")
+            event = _catalog_profile(blueprints, "zigbee2mqtt-moes-zg-101zd-event", event_topic, topic, "event")
         if actions:
-            command = _catalog_profile(blueprints, "zigbee2mqtt-moes-zg-101zd", "zigbee2mqtt/+", "command")
+            command = _catalog_profile(blueprints, "zigbee2mqtt-moes-zg-101zd", "zigbee2mqtt/+", topic, "command")
         if mode_unknown:
             if not (event or command):
                 return None
@@ -76,9 +89,9 @@ def _blueprint_suggestion(items, blueprints):
     if model == "ZG-101ZL" and mode != "event":
         if not mode_unknown:
             return None
-        profile = _catalog_profile(blueprints, key, event_topic, "event")
+        profile = _catalog_profile(blueprints, key, event_topic, topic, "event")
         return {**profile, "reason": "mode_unknown"} if profile else None
-    profile = _catalog_profile(blueprints, key, event_topic)
+    profile = _catalog_profile(blueprints, key, event_topic, topic)
     return {**profile, "reason": reason} if profile else None
 
 
@@ -91,6 +104,9 @@ def build_inventory(areas, devices, entities, configs, metadata, definitions, *,
     devices_by_id = {device["id"]: device for device in devices}
     entity_devices = {entity["entity_id"]: entity.get("device_id") for entity in entities}
     matches = {device["id"]: _definitions_for(device, definitions) for device in devices}
+    definition_topics = Counter(_device_topic(item) for item in definitions)
+    matched_topics = Counter(_device_topic(item) for items in matches.values() for item in items)
+    shared_topics = {topic for topic, count in (definition_topics | matched_topics).items() if count > 1}
     bound = {device["id"]: [] for device in devices}
     unassociated = []
     bindings = metadata.get("bindings", {})
@@ -111,7 +127,7 @@ def build_inventory(areas, devices, entities, configs, metadata, definitions, *,
                 candidate = entity_devices.get(identifier)
                 candidates = [candidate] if candidate in devices_by_id else []
             elif blueprint.get("is_zigbee2mqtt"):
-                candidates = [device_id for device_id, items in matches.items() if any(identifier == f"{item['base_topic']}/{item['friendly_name']}/action" for item in items)]
+                candidates = [device_id for device_id, items in matches.items() if any(identifier == f"{_device_topic(item)}/action" for item in items)]
         if len(candidates) == 1:
             bound[candidates[0]].append(config_id)
         else:
@@ -136,7 +152,7 @@ def build_inventory(areas, devices, entities, configs, metadata, definitions, *,
             "config_ids": sorted(bound[device_id]),
             "management": "external" if meta.get("management") == "external" else ("farhome" if bound[device_id] else "unknown"),
             "compatibility": "verified" if verified else "unverified",
-            "blueprint_suggestion": _blueprint_suggestion(items, blueprints or {}),
+            "blueprint_suggestion": _blueprint_suggestion(items, blueprints or {}, shared_topics),
             "external_automations": deepcopy(meta.get("external_automations", [])),
             "image": resolve_image(definition, blueprint, items[0].get("icon") if len(items) == 1 else None),
         })
