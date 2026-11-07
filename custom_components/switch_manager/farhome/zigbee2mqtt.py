@@ -57,16 +57,21 @@ def resolve_image(definition, blueprint, custom_icon=None):
     return None
 
 
-def has_actions(definition):
+def action_values(definition):
+    values = set()
     pending = list((definition or {}).get("exposes") or [])
     while pending:
         item = pending.pop()
         if not isinstance(item, dict):
             continue
-        if item.get("property") == "action" and isinstance(item.get("values"), list) and item["values"]:
-            return True
+        if item.get("property") == "action" and isinstance(item.get("values"), list):
+            values.update(value for value in item["values"] if isinstance(value, str))
         pending.extend(item.get("features") or [])
-    return False
+    return values
+
+
+def has_actions(definition):
+    return bool(action_values(definition))
 
 
 async def async_definitions(hass, timeout=1.5):

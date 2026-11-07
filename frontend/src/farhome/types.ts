@@ -20,11 +20,13 @@ export interface EntityState {entity_id: string; state: string; attributes: Reco
 export type ServiceMap = Record<string, Record<string, {fields?: Record<string, any>; [key:string]: unknown}>>;
 export interface FarhomeHass extends HomeAssistant {states: Record<string, EntityState>; services: ServiceMap;}
 export interface ImageAsset {url: string; source_url: string; source_label: string;}
+export interface BlueprintSuggestion {id:string;name:string;reason:'model'|'mode'|'gestures';mode?:string;}
 export interface Controller {
   device_id: string; name: string; area_id: string|null;
   manufacturer: string; model: string; config_ids: string[];
   management: 'farhome'|'external'|'unknown'; compatibility: 'verified'|'unverified';
   external_automations: string[]; image: ImageAsset|null;
+  blueprint_suggestion?: BlueprintSuggestion|null;
 }
 export interface ControllerMetadata {manual?: boolean; management?: 'unknown'|'external'; external_automations?: string[];}
 export interface Binding {device_id: string; verified?: boolean; selector_helper?: string|null; conflicts_checked?: boolean;}
