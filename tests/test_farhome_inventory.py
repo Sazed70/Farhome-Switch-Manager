@@ -80,8 +80,26 @@ class InventoryTests(unittest.TestCase):
 
         self.assertEqual(suggestion("event")["id"], event_id)
         self.assertEqual(suggestion("command")["id"], state_id)
-        self.assertIsNone(suggestion(None))
+        for mode in (None, "unknown", "unavailable"):
+            hint = suggestion(mode)
+            self.assertEqual((hint["id"], hint["mode"], hint["reason"]), (event_id, "event", "mode_unknown"))
+            self.assertEqual(hint["alternative"], {"id": state_id, "name": "State", "mode": "command"})
         self.assertIsNone(suggestion("event", {state_id: catalog[state_id]}))
+
+    def test_loginovo_clicks_are_conditional_when_mode_is_unavailable(self):
+        areas, devices, definitions = registry_fixture()
+        definitions[0]["definition"]["model"] = "ZG-101ZL"
+        key = "zigbee2mqtt-tuya-1-gang-remote"
+        catalog = {key: SimpleNamespace(name="Single button", is_zigbee2mqtt=True, mqtt_topic_format="zigbee2mqtt/+/action")}
+        metadata = {"controllers": {}, "bindings": {}}
+
+        def suggestion(mode):
+            definitions[0]["operation_mode"] = mode
+            return build_inventory(areas, devices, [], {}, metadata, definitions, blueprints=catalog)["controllers"][0]["blueprint_suggestion"]
+
+        self.assertEqual(suggestion("unknown")["mode"], "event")
+        self.assertEqual(suggestion("event")["reason"], "gestures")
+        self.assertIsNone(suggestion("command"))
 
     def test_candidate_requires_advertised_gestures_and_unambiguous_mqtt_device(self):
         areas, devices, definitions = registry_fixture()

@@ -22,6 +22,16 @@ EVENT_BLUEPRINTS = {
 }
 
 
+def _catalog_profile(blueprints, key, topic_format, mode=None):
+    blueprint = blueprints.get(key)
+    if not blueprint or not blueprint.is_zigbee2mqtt or blueprint.mqtt_topic_format != topic_format:
+        return None
+    profile = {"id": key, "name": blueprint.name}
+    if mode:
+        profile["mode"] = mode
+    return profile
+
+
 def _blueprint_suggestion(items, blueprints):
     if len(items) != 1:
         return None
@@ -32,30 +42,44 @@ def _blueprint_suggestion(items, blueprints):
         return None
     model = model.upper()
     mode = item.get("operation_mode")
+    mode_unknown = mode in (None, "unknown", "unavailable")
     actions = action_values(definition)
-    topic_format = "zigbee2mqtt/+/action"
+    event_topic = "zigbee2mqtt/+/action"
     if model == "ZG-101ZD":
-        reason = "mode"
-        if mode == "event" and CLICK_GESTURES | {"rotate_left", "rotate_right"} <= actions:
-            key = "zigbee2mqtt-moes-zg-101zd-event"
-        elif mode in ("command", "command_mode", "color_temperature") and actions:
-            key = "zigbee2mqtt-moes-zg-101zd"
-            topic_format = "zigbee2mqtt/+"
+        event = None
+        command = None
+        if CLICK_GESTURES | {"rotate_left", "rotate_right"} <= actions:
+            event = _catalog_profile(blueprints, "zigbee2mqtt-moes-zg-101zd-event", event_topic, "event")
+        if actions:
+            command = _catalog_profile(blueprints, "zigbee2mqtt-moes-zg-101zd", "zigbee2mqtt/+", "command")
+        if mode_unknown:
+            if not (event or command):
+                return None
+            hint = {**(event or command), "reason": "mode_unknown"}
+            if event and command:
+                hint["alternative"] = command
+            return hint
+        if mode == "event":
+            profile = event
+        elif mode in ("command", "command_mode", "color_temperature"):
+            profile = command
         else:
             return None
-    else:
-        match = EVENT_BLUEPRINTS.get(model)
-        if not match or (model == "ZG-101ZL" and mode != "event"):
-            return None
-        key, reason, required = match
-        if not required <= actions:
-            return None
+        return {**profile, "reason": "mode", "mode": mode} if profile else None
 
-    blueprint = blueprints.get(key)
-    if not blueprint or not blueprint.is_zigbee2mqtt or blueprint.mqtt_topic_format != topic_format:
+    match = EVENT_BLUEPRINTS.get(model)
+    if not match:
         return None
-    return {"id": key, "name": blueprint.name, "reason": reason,
-            **({"mode": mode} if reason == "mode" else {})}
+    key, reason, required = match
+    if not required <= actions:
+        return None
+    if model == "ZG-101ZL" and mode != "event":
+        if not mode_unknown:
+            return None
+        profile = _catalog_profile(blueprints, key, event_topic, "event")
+        return {**profile, "reason": "mode_unknown"} if profile else None
+    profile = _catalog_profile(blueprints, key, event_topic)
+    return {**profile, "reason": reason} if profile else None
 
 
 def _definitions_for(device, definitions):
