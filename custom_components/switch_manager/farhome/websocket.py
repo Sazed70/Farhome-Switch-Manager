@@ -8,7 +8,7 @@ from homeassistant.helpers import device_registry as dr
 from ..const import DOMAIN, CONF_MANAGED_SWITCHES
 from .inventory import async_snapshot
 from .config_service import async_read_config, async_save_config, async_set_enabled, FarhomeError
-from .selector import async_read_selector, async_update_selector
+from .selector import async_create_selector, async_read_selector, async_update_selector
 
 
 async def async_reply(connection, msg, operation):
@@ -77,6 +77,13 @@ async def websocket_enabled(hass, connection, msg):
 
 
 @websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/selector/create', vol.Required('name'): str, vol.Required('options'): list, vol.Optional('initial'): vol.Any(str, None)})
+@websocket_api.async_response
+async def websocket_selector_create(hass, connection, msg):
+    await async_reply(connection, msg, async_create_selector(hass, msg['name'], msg['options'], msg.get('initial')))
+
+
+@websocket_api.require_admin
 @websocket_api.websocket_command({vol.Required('type'): 'switch_manager/farhome/selector/get', vol.Required('entity_id'): str, vol.Required('config_id'): str})
 @websocket_api.async_response
 async def websocket_selector_get(hass, connection, msg):
@@ -93,6 +100,6 @@ async def websocket_selector_update(hass, connection, msg):
 async def async_setup_websocket(hass):
     if hass.data[DOMAIN].get("farhome_websocket_registered"):
         return
-    for command in (websocket_snapshot, websocket_metadata, websocket_get_config, websocket_save_config, websocket_enabled, websocket_selector_get, websocket_selector_update):
+    for command in (websocket_snapshot, websocket_metadata, websocket_get_config, websocket_save_config, websocket_enabled, websocket_selector_create, websocket_selector_get, websocket_selector_update):
         websocket_api.async_register_command(hass, command)
     hass.data[DOMAIN]["farhome_websocket_registered"] = True

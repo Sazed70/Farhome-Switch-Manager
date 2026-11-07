@@ -9,6 +9,7 @@ import {FarhomeApi} from './api.js';
 import {t,TextKey,errorKey,gestureTitle} from './i18n.js';
 import {controls} from './styles.js';
 import {dialogKeys} from './dialog.js';
+import {matchingGestures,sharesIdentifier} from './blueprint-change.js';
 import {buildQuickAction,parseQuickAction,supportedQuickActions,supportsBrightness,buildSelectorAction,parseSelectorAction} from './actions.js';
 import {FarhomeSelectorEditor} from './selector-editor.js';
 import './selector-editor.js';
@@ -35,11 +36,13 @@ export class FarhomeDeviceEditor extends LitElement{
   @state() private newIdentifier='';
   @state() private newName='';
   @state() private blueprintSearch='';
+  @state() private changingBlueprint=false;
   @state() private preparing=false;
   @state() private showAdvanced=false;
   @state() private replacePending=false;
   @state() private activationPending=false;
   @state() private helperChoice='';
+  @state() private creatingSelector=false;
   @state() private helperDirty=false;
   @state() private helperBusy=false;
   @state() private selectorPending=false;
@@ -63,11 +66,11 @@ export class FarhomeDeviceEditor extends LitElement{
     const conditional=suggestion.reason==='mode_unknown';
     const reason=suggestion.reason==='mode'
       ? `${this.text('blueprint_mode_match')} «${suggestion.mode}».`
-      : this.text(conditional?'blueprint_mode_unknown':suggestion.reason==='gestures'?'blueprint_gesture_match':'blueprint_model_match');
+      : suggestion.reason==='gestures'?undefined:this.text(conditional?'blueprint_mode_unknown':'blueprint_model_match');
     const choices=suggestion.alternative?[suggestion,suggestion.alternative]:[suggestion];
     return html`<div class="notice">
       <h3>${this.text('blueprint_suggested')}</h3>
-      <p class="muted">${reason}</p>
+      ${reason?html`<p class="muted">${reason}</p>`:nothing}
       ${choices.map(choice=>html`<div class="row blueprint-choice">
         <p>${conditional?`${this.text(choice.mode==='event'?'blueprint_if_event':'blueprint_if_command')} · `:nothing}<strong>${choice.name}</strong></p>
         ${this.showsSetupForm?html`<button type="button" aria-label=${`${this.text('blueprint_use')} · ${choice.name}`}
@@ -76,8 +79,8 @@ export class FarhomeDeviceEditor extends LitElement{
       ${assigned?html`<p>${this.text('blueprint_assigned')} · ${assigned.name}</p>`:nothing}
     </div>`;
   }
-  get hasDirty(){return this.dirty||this.helperDirty;}
-  get hasHelperDirty(){return this.helperDirty;}
+  get hasDirty(){return this.dirty||this.hasHelperDirty;}
+  get hasHelperDirty(){return this.helperDirty||this.creatingSelector;}
   get saving(){return this.busy||this.helperBusy;}
   protected get readonly(){return this.controller.management==='external'&&!this.preparing;}
   protected get blueprint(){return typeof this.draft?.blueprint==='object'?this.draft.blueprint:undefined;}
@@ -90,13 +93,13 @@ export class FarhomeDeviceEditor extends LitElement{
     if((changed.has('replacePending')&&this.replacePending)||(changed.has('activationPending')&&this.activationPending))this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
   }
   private async openController(){
-    this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error=undefined;this.saved=false;this.loading=false;this.preparing=false;this.pickedConfig='';this.activationPending=false;this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.resetSetupForm();this.markDirty(false);
+    this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error=undefined;this.saved=false;this.loading=false;this.preparing=false;this.pickedConfig='';this.activationPending=false;this.creatingSelector=false;this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.resetSetupForm();this.markDirty(false);
     if(this.controller.config_ids.length===1){this.pickedConfig=this.controller.config_ids[0];await this.load(this.pickedConfig);}
     else if(!this.controller.config_ids.length)await this.loadBlueprints();
   }
   private async loadBlueprints(){try{const result=await this.hass.callWS<{blueprints:Record<string,Blueprint>}>({type:'switch_manager/blueprints'});this.blueprints=result.blueprints;}catch(err){this.error=errorKey(err,'load_error');}}
   private adopt(value:ConfigEnvelope){
-    this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.activationPending=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
+    this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.activationPending=false;this.changingBlueprint=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
   }
   async load(id:string){const token=++this.token;this.loading=true;this.error=undefined;try{const value=await this.api.get(id);if(token===this.token)this.adopt(value);}catch(err){if(token===this.token)this.error=errorKey(err,'load_error');}finally{if(token===this.token)this.loading=false;}}
   private emitDirty(){this.dispatchEvent(new CustomEvent('dirty-changed',{detail:{dirty:this.hasDirty},bubbles:true,composed:true}));}
@@ -164,6 +167,7 @@ export class FarhomeDeviceEditor extends LitElement{
     this.newBlueprint='';
     this.newIdentifier='';
     this.blueprintSearch='';
+    this.changingBlueprint=false;
     this.suggestedIdentifier=false;
   }
   private selectBlueprint(id:string){
@@ -184,7 +188,7 @@ export class FarhomeDeviceEditor extends LitElement{
     this.blueprintSearch='';
     this.error=undefined;
   }
-  private setupForm(){
+  private blueprintPicker(onSelect:(id:string)=>void){
     const terms=this.blueprintSearch.trim().toLocaleLowerCase(this.hass.language).split(/\s+/).filter(Boolean);
     const suggestion=this.controller.blueprint_suggestion;
     const catalog=Object.values(this.blueprints).sort((a,b)=>a.name.localeCompare(b.name,this.hass.language)||a.service.localeCompare(b.service,this.hass.language));
@@ -195,28 +199,89 @@ export class FarhomeDeviceEditor extends LitElement{
     });
     const selected=this.blueprints[this.newBlueprint];
     const options=selected&&!results.includes(selected)?[selected,...results]:results;
-    return html`<form class="stack" @submit=${(e:Event)=>{e.preventDefault();this.createDraft();}}>
-      <p>${this.text('no_config')}</p>
-      <label>${this.text('name')}<input required maxlength="255" .value=${this.newName} @input=${(e:Event)=>{this.newName=(e.target as HTMLInputElement).value;this.markDirty();}}></label>
+    return html`
       <label>${this.text('blueprint_search')}<input type="search" .value=${this.blueprintSearch}
         @input=${(e:Event)=>this.blueprintSearch=(e.target as HTMLInputElement).value}
         @keydown=${(e:KeyboardEvent)=>{if(e.key==='Enter')e.preventDefault();}}></label>
-      <label>${this.text('blueprint')}<select required @change=${(e:Event)=>this.selectBlueprint((e.target as HTMLSelectElement).value)}>
+      <label>${this.text('blueprint')}<select required @change=${(e:Event)=>onSelect((e.target as HTMLSelectElement).value)}>
         <option value="" .selected=${live(!this.newBlueprint)}>${this.text('choose')}</option>
         ${repeat(options,value=>value.id,value=>html`<option value=${value.id} .selected=${live(value.id===this.newBlueprint)}>${value.name} · ${value.service}</option>`)}
       </select></label>
-      ${terms.length&&!results.length?html`<p class="muted" role="status">${this.text('blueprint_no_results')}</p>`:nothing}
+      ${terms.length&&!results.length?html`<p class="muted" role="status">${this.text('blueprint_no_results')}</p>`:nothing}`;
+  }
+  private setupForm(){
+    return html`<form class="stack" @submit=${(e:Event)=>{e.preventDefault();this.createDraft();}}>
+      <p>${this.text('no_config')}</p>
+      <label>${this.text('name')}<input required maxlength="255" .value=${this.newName} @input=${(e:Event)=>{this.newName=(e.target as HTMLInputElement).value;this.markDirty();}}></label>
+      ${this.blueprintPicker(id=>this.selectBlueprint(id))}
       <label>${this.text('identifier')}<input required maxlength="1024" .value=${this.newIdentifier} @input=${(e:Event)=>{this.newIdentifier=(e.target as HTMLInputElement).value;this.suggestedIdentifier=false;this.markDirty();}}></label>
       <button type="submit">${this.text('create_draft')}</button>
     </form>`;
+  }
+  private async openBlueprintChange(){
+    this.newBlueprint=this.blueprint?.id||'';
+    this.blueprintSearch='';
+    this.changingBlueprint=true;
+    this.error=undefined;
+    await this.loadBlueprints();
+  }
+  private blueprintChange(){
+    const next=this.blueprints[this.newBlueprint];
+    const before=this.blueprint;
+    const changed=next&&next.id!==before?.id;
+    const matches=changed?matchingGestures(before,next):new Map<string,string>();
+    const configured=this.draft!.buttons.flatMap((button,b)=>button.actions.flatMap((action,a)=>
+      action.sequence.length?[{b,a,key:`${b}:${a}`,title:before?.buttons[b]?.actions[a]?.title}]:[]));
+    const removed=configured.filter(item=>!matches.has(item.key));
+    return html`<section class="notice stack" aria-label=${this.text('blueprint_change_preview')}>
+      ${this.blueprintPicker(id=>this.newBlueprint=id)}
+      ${changed?html`<p>${this.text('blueprint_change_notice')}</p>
+        <p>${this.text('blueprint_change_keep')} · ${configured.length-removed.length}</p>
+        ${removed.length?html`<div><p>${this.text('blueprint_change_removed')} · ${removed.length}</p><ul>
+          ${removed.map(({b,a,title})=>html`<li>${this.text('button')} ${b+1} · ${title?gestureTitle(this.hass.language,title):a+1}</li>`)}
+        </ul></div>`:nothing}`:nothing}
+      <div class="actions"><button ?disabled=${!changed||this.saving||this.hasHelperDirty} @click=${()=>this.applyBlueprintChange(next,matches)}>${this.text('blueprint_change_apply')}</button>
+        <button @click=${()=>this.changingBlueprint=false}>${this.text('cancel')}</button></div>
+    </section>`;
+  }
+  private applyBlueprintChange(next:Blueprint,matches:Map<string,string>){
+    const draft=this.draft!;
+    const template=createEmptyConfig(next);
+    const before=this.blueprint;
+    const quick=new Map<string,QuickAction>();
+    const selectors=new Map<string,SelectorPatch>();
+    for(const [from,to] of matches){
+      const [oldButton,oldAction]=from.split(':').map(Number);
+      const [button,action]=to.split(':').map(Number);
+      const existing=draft.buttons[oldButton]?.actions[oldAction];
+      if(!existing)continue;
+      template.buttons[button].actions[action]=existing;
+      const quickAction=this.quick.get(from);
+      if(quickAction)quick.set(to,quickAction);
+      const selector=this.selectors.get(from);
+      if(selector)selectors.set(to,{...selector,button,action});
+    }
+    const suggestion=this.controller.blueprint_suggestion;
+    const suggested=suggestion?.id===next.id?suggestion:suggestion?.alternative?.id===next.id?suggestion.alternative:undefined;
+    const identifier=sharesIdentifier(before,next)&&draft.identifier?draft.identifier:suggested?.identifier||'';
+    this.draft={...draft,blueprint:next,buttons:template.buttons,enabled:false,identifier,valid_blueprint:true,is_mismatch:false};
+    this.quick=quick;
+    this.selectors=selectors;
+    this.selected=matches.get(this.selected)||'0:0';
+    this.showAdvanced=false;
+    this.selectorPending=false;
+    this.changingBlueprint=false;
+    this.error=undefined;
+    this.markDirty();
   }
   private async createDraft(){
     const blueprint=this.blueprints[this.newBlueprint];if(!blueprint||!this.newIdentifier.trim()||!this.newName.trim()){this.error='invalid_form';return;}
     this.draft={...createEmptyConfig(blueprint),id:null,name:this.newName,identifier:this.newIdentifier,enabled:false};this.binding={device_id:this.controller.device_id,verified:false};this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;this.preparing=true;this.markDirty();
   }
   async save(forNavigation=false):Promise<boolean>{
-    if(forNavigation&&this.helperDirty){this.error='helper_draft_pending';return false;}
-    if(this.busy||!this.draft||this.readonly)return false;
+    if(this.creatingSelector||(forNavigation&&this.helperDirty)){this.error='helper_draft_pending';return false;}
+    if(this.saving||!this.draft||this.readonly||this.changingBlueprint)return false;
+    if(!this.draft.identifier.trim()){this.error='blueprint_change_identifier';return false;}
     const inputs=this.renderRoot.querySelectorAll('input');for(const input of inputs)if(!input.reportValidity())return false;
     this.busy=true;this.error=undefined;
     try{
@@ -226,7 +291,7 @@ export class FarhomeDeviceEditor extends LitElement{
       this.dispatchEvent(new CustomEvent('save',{detail:response,bubbles:true,composed:true}));return true;
     }catch(err){this.error=errorKey(err,'save_error');return false;}finally{this.busy=false;}
   }
-  discard(){this.renderRoot.querySelector<FarhomeSelectorEditor>('farhome-selector-editor')?.discard();this.helperDirty=false;if(this.envelope)this.adopt(this.envelope);else{this.draft=undefined;this.resetSetupForm();this.markDirty(false);}this.dispatchEvent(new CustomEvent('cancel',{bubbles:true,composed:true}));}
+  discard(){this.renderRoot.querySelector<FarhomeSelectorEditor>('farhome-selector-editor')?.discard();this.creatingSelector=false;this.helperDirty=false;if(this.envelope)this.adopt(this.envelope);else{this.draft=undefined;this.resetSetupForm();this.markDirty(false);}this.dispatchEvent(new CustomEvent('cancel',{bubbles:true,composed:true}));}
   private async toggle(manualConfirmation=false){
     if(!this.envelope||this.hasDirty||this.saving)return;
     this.activationPending=false;this.busy=true;this.error=undefined;
@@ -239,14 +304,52 @@ export class FarhomeDeviceEditor extends LitElement{
       else this.error=errorKey(err,'activation_error');
     }finally{this.busy=false;}
   }
-  private get canLinkHelper(){return !!this.envelope&&!!this.draft?.enabled&&!!this.binding?.verified&&!!this.binding?.conflicts_checked&&!this.readonly;}
+  private get canEditHelper(){return !!this.envelope&&!!this.draft?.enabled&&!!this.binding?.verified&&!!this.binding?.conflicts_checked;}
+  private setCreatingSelector(open:boolean){
+    this.creatingSelector=open;
+    this.helperDirty=false;
+    this.emitDirty();
+  }
+  private helperDraftChanged(event:CustomEvent){
+    this.helperDirty=event.detail.dirty;
+    this.helperBusy=event.detail.busy;
+    this.emitDirty();
+  }
+  private linkSelector(helper:string){
+    const previous=this.binding!.selector_helper;
+    if(helper===previous)return;
+    this.draft!.buttons.forEach((button,b)=>button.actions.forEach((action,a)=>{
+      const selected=parseSelectorAction(action);
+      if(!selected||selected.helper_id!==previous)return;
+      const {kind,step,transition,mode}=selected;
+      button.actions[a]={...action,...buildSelectorAction(helper,kind,step,transition,mode)};
+      this.selectors.set(`${b}:${a}`,{button:b,action:a,kind,step,transition,mode});
+    }));
+    this.binding={...this.binding!,selector_helper:helper};
+    this.helperChoice='';
+    this.changed();
+  }
   protected selectorSection(){
     if(this.readonly)return nothing;
     const helper=this.binding?.selector_helper;
-    return html`<details open=${helper?true:nothing}><summary>${this.text('selector')}</summary><div class="stack setup">
-      ${this.canLinkHelper?html`<label>${this.text('helper')}<select aria-label=${this.text('helper')} ?disabled=${this.busy||this.helperDirty||this.helperBusy} @change=${(e:Event)=>this.helperChoice=(e.target as HTMLSelectElement).value}><option value="">${this.text('choose')}</option>${Object.keys(this.hass.states).filter(id=>/^input_select\.[a-z0-9_]+$/.test(id)).map(id=>html`<option value=${id} .selected=${id===(this.helperChoice||helper)}>${this.hass.states[id].attributes.friendly_name||id}</option>`)}</select></label><button ?disabled=${this.busy||this.helperDirty||this.helperBusy||!this.helperChoice||helper===this.helperChoice} @click=${()=>{this.binding={...this.binding!,selector_helper:this.helperChoice};this.changed();}}>${this.text('link_helper')}</button>`:html`<p class="muted">${this.text('helper_migration')}</p>`}
-      ${helper!==this.envelope?.metadata?.selector_helper?html`<p class="notice">${this.text('helper_pending')}</p>`:nothing}
-      ${helper&&this.envelope?html`<farhome-selector-editor .hass=${this.hass} .entityId=${helper} .configId=${this.envelope.config_id} .allowed=${this.canLinkHelper&&!this.busy&&helper===this.envelope.metadata?.selector_helper} @helper-dirty-changed=${(e:CustomEvent)=>{this.helperDirty=e.detail.dirty;this.helperBusy=e.detail.busy;this.emitDirty();}}></farhome-selector-editor>`:nothing}
+    const savedHelper=this.envelope?.metadata?.selector_helper;
+    const canLink=!this.draft?.enabled||this.canEditHelper;
+    const blocked=this.saving||this.helperDirty;
+    const options=Object.values(this.hass.states).filter(entity=>/^input_select\.[a-z0-9_]+$/.test(entity.entity_id)
+      &&Array.isArray(entity.attributes.options)&&entity.attributes.options.length>0
+      &&entity.attributes.options.every((id:unknown)=>typeof id==='string'&&/^light\.[a-z0-9_]+$/.test(id)&&!!this.hass.states[id]));
+    return html`<details open=${helper||this.creatingSelector?true:nothing}><summary>${this.text('selector')}</summary><div class="stack setup">
+      ${!canLink?html`<p class="muted">${this.text('helper_requires_disabled')}</p>`:this.creatingSelector?html`<farhome-selector-editor creating .hass=${this.hass} .suggestedName=${`${this.draft!.name} · ${this.text('selector')}`.slice(0,255)}
+        @selector-created=${(e:CustomEvent<{entity_id:string}>)=>{this.setCreatingSelector(false);this.linkSelector(e.detail.entity_id);}}
+        @selector-create-cancel=${()=>this.setCreatingSelector(false)} @helper-dirty-changed=${this.helperDraftChanged}></farhome-selector-editor>`:html`
+        <div class="fields"><label>${this.text('helper')}<select aria-label=${this.text('helper')} ?disabled=${blocked} @change=${(e:Event)=>this.helperChoice=(e.target as HTMLSelectElement).value}>
+          <option value="" .selected=${!this.helperChoice}>${this.text('choose')}</option>
+          ${options.map(entity=>html`<option value=${entity.entity_id} .selected=${entity.entity_id===this.helperChoice}>${entity.attributes.friendly_name||entity.entity_id}</option>`)}
+        </select></label><button ?disabled=${blocked||!options.some(entity=>entity.entity_id===this.helperChoice&&helper!==this.helperChoice)} @click=${()=>this.linkSelector(this.helperChoice)}>${this.text('link_helper')}</button></div>
+        <div class="actions"><button ?disabled=${blocked} @click=${()=>this.setCreatingSelector(true)}>${this.text('create_light_list')}</button></div>`}
+      ${helper?html`<p class="muted">${this.hass.states[helper]?.attributes.friendly_name||helper}</p>`:nothing}
+      ${helper&&helper!==savedHelper?html`<p class="notice">${this.text('helper_pending')}</p>`:nothing}
+      ${!this.creatingSelector&&helper&&helper===savedHelper&&this.envelope?html`<farhome-selector-editor .hass=${this.hass} .entityId=${helper} .configId=${this.envelope.config_id} .allowed=${this.canEditHelper&&!this.busy} @helper-dirty-changed=${this.helperDraftChanged}></farhome-selector-editor>`:nothing}
     </div></details>`;
   }
   private applySelector(){const helper=this.binding?.selector_helper;if(this.busy||this.readonly||!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,value);this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error='invalid_form';}}
@@ -266,7 +369,7 @@ export class FarhomeDeviceEditor extends LitElement{
       ${this.blueprintHint()}
       ${this.error?html`<div class="notice" role="alert">${this.text(this.error)}${!this.draft?html` <button @click=${()=>this.pickedConfig?this.load(this.pickedConfig):this.loadBlueprints()}>${this.text('retry')}</button>`:nothing}</div>`:nothing}
       ${this.loading?html`<p role="status">${this.text('loading')}</p>`:nothing}
-      ${this.controller.config_ids.length>1?html`<label>${this.text('configuration')}<select .value=${this.pickedConfig} ?disabled=${this.dirty||this.busy} @change=${(e:Event)=>{this.pickedConfig=(e.target as HTMLSelectElement).value;if(this.pickedConfig)this.load(this.pickedConfig);}}><option value="">${this.text('choose_configuration')}</option>${this.controller.config_ids.map(id=>html`<option value=${id}>${id}</option>`)}</select></label>`:nothing}
+      ${this.controller.config_ids.length>1?html`<label>${this.text('configuration')}<select .value=${this.pickedConfig} ?disabled=${this.hasDirty||this.saving} @change=${(e:Event)=>{this.pickedConfig=(e.target as HTMLSelectElement).value;if(this.pickedConfig)this.load(this.pickedConfig);}}><option value="">${this.text('choose_configuration')}</option>${this.controller.config_ids.map(id=>html`<option value=${id}>${id}</option>`)}</select></label>`:nothing}
       ${this.readonly?html`<p class="notice">${this.text('external_notice')}</p><button ?disabled=${this.busy||this.loading} @click=${this.prepare}>${this.text('prepare')}</button>`:nothing}
       ${this.showsSetupForm?this.setupForm():nothing}
       ${this.draft?html`
@@ -281,8 +384,13 @@ export class FarhomeDeviceEditor extends LitElement{
             ${blueprint.buttons[this.indices[0]].actions[this.indices[1]].release_index!=null?html`<label class="check"><input type="checkbox" .checked=${!!action.loop} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.loop=(e.target as HTMLInputElement).checked;if(quick)this.quick.set(this.selected,{...quick,loop:action.loop});this.changed();}}>${this.text('loop')}</label>${action.loop?html`<label>${this.text('loop_interval')}<input type="number" min="50" max="5000" step="1" .value=${String(action.loop_interval??250)} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{action.loop_interval=(e.target as HTMLInputElement).valueAsNumber;if(quick)this.quick.set(this.selected,{...quick,loop_interval:action.loop_interval});this.changed();}}></label>`:nothing}`:nothing}
           </div>`:nothing}`}
         ${this.selectorSection()}
-        ${!this.readonly?html`<details><summary>${this.text('setup')}</summary><div class="stack setup"><label>${this.text('name')}<input .value=${this.draft.name} maxlength="255" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.name=(e.target as HTMLInputElement).value;this.changed();}}></label><label>${this.text('identifier')}<input .value=${this.draft.identifier} maxlength="1024" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.identifier=(e.target as HTMLInputElement).value;this.changed();}}></label></div></details>
-        <footer class="row"><button class="primary" ?disabled=${this.busy||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button><button ?disabled=${this.busy||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>${!this.readonly&&this.envelope?html`<button ?disabled=${this.saving||this.hasDirty} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}<span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span></footer>`:nothing}
+        ${!this.readonly?html`<details ?open=${this.changingBlueprint||!this.draft.identifier.trim()}>
+          <summary>${this.text('setup')}</summary><div class="stack setup">
+          <label>${this.text('name')}<input .value=${this.draft.name} maxlength="255" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.name=(e.target as HTMLInputElement).value;this.changed();}}></label>
+          <label>${this.text('identifier')}<input .value=${this.draft.identifier} maxlength="1024" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.identifier=(e.target as HTMLInputElement).value;this.changed();}}></label>
+          ${this.changingBlueprint?this.blueprintChange():html`<div><button ?disabled=${this.saving||this.hasHelperDirty} @click=${this.openBlueprintChange}>${this.text('blueprint_change')}</button></div>`}
+          </div></details>
+        <footer class="row"><button class="primary" ?disabled=${this.saving||this.creatingSelector||this.changingBlueprint||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button><button ?disabled=${this.saving||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>${!this.readonly&&this.envelope?html`<button ?disabled=${this.saving||this.hasDirty||this.changingBlueprint} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}<span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span></footer>`:nothing}
       `:nothing}
       ${this.activationPending?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true"
         aria-label=${this.text('verify_activation')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.activationPending=false)}>
@@ -295,6 +403,6 @@ export class FarhomeDeviceEditor extends LitElement{
     </section>`;
   }
   static styles=[controls,css`
-    section{padding:28px}.blueprint-choice{margin-top:8px;justify-content:space-between}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
+    section{padding:28px}section.notice{padding:14px}.blueprint-choice{margin-top:8px;justify-content:space-between}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
   `];
 }

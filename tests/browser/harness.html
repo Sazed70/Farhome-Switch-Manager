@@ -3,9 +3,10 @@
 <style>body{margin:0;font:16px Roboto,Arial,sans-serif;--primary-color:#007a92;--primary-text-color:#202124;--secondary-text-color:#59636b;--primary-background-color:#f5f7f8;--card-background-color:#fff;--divider-color:#d6dce0;background:var(--primary-background-color);color:var(--primary-text-color)}body.dark{--primary-color:#6fd4e4;--primary-text-color:#e7edf0;--secondary-text-color:#b4bec5;--primary-background-color:#14191d;--card-background-color:#20272c;--divider-color:#43515a;color-scheme:dark}</style>
 <script type="module">
 import '../../custom_components/switch_manager/assets/switch_manager_panel.js';
-const blueprint={id:'synthetic',name:'Synthetic knob',service:'Zigbee2MQTT',has_image:false,buttons:[{actions:[{title:'press'},{title:'rotate right'},{title:'press 2x'},{title:'hold'}]},{actions:[{title:'release'}]}]};
-const commandBlueprint={...blueprint,id:'synthetic-command',name:'Synthetic command knob'};
-const otherBlueprint={...blueprint,id:'acme-mx42',name:'Acme switch',service:'Z-Wave JS'};
+const blueprint={id:'synthetic',name:'Synthetic knob',service:'Zigbee2MQTT',event_type:'mqtt',mqtt_topic_format:'zigbee2mqtt/+/action',has_image:false,buttons:[{actions:[{title:'press'},{title:'rotate right'},{title:'press 2x'},{title:'hold'}]},{actions:[{title:'release'}]}]};
+const commandBlueprint={...blueprint,id:'synthetic-command',name:'Synthetic command knob',buttons:[{actions:[{title:'rotate right'},{title:'press'},{title:'hold'}]},{actions:[{title:'release'}]}]};
+const otherBlueprint={...blueprint,id:'acme-mx42',name:'Acme switch',service:'Z-Wave JS',event_type:'zwave_js_value_notification',mqtt_topic_format:undefined};
+const blueprints={synthetic:blueprint,'synthetic-command':commandBlueprint,'acme-mx42':otherBlueprint};
 const empty=()=>({mode:'restart',sequence:[],loop:false,loop_interval:250});
 const feedback={mode:'queued',sequence:[{action:'light.toggle',target:{entity_id:'light.desk'}},{delay:{milliseconds:500}},{action:'light.toggle',target:{entity_id:'light.desk'}}],loop:false,loop_interval:250};
 const config={id:'1',name:'Studio',enabled:true,identifier:'synthetic/studio/action',blueprint,rotate:0,variables:{},valid_blueprint:true,is_mismatch:false,buttons:[{actions:[empty(),empty(),feedback,empty()]},{actions:[empty()]}]};
@@ -18,12 +19,14 @@ window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',stat
   calls.push(structuredClone(msg));
   if(msg.type==='call_service')throw Error('Unexpected load actuation');
   if(msg.type.endsWith('/snapshot')){if(failRead)throw {code:'read_error',message:'Lettura non riuscita'};return structuredClone(fixture);}
-  if(msg.type==='switch_manager/blueprints')return {blueprints:{synthetic:blueprint,'synthetic-command':commandBlueprint,'acme-mx42':otherBlueprint},blueprint};
+  if(msg.type==='switch_manager/blueprints')return {blueprints,blueprint};
   if(msg.type.endsWith('/config/get'))return {config_id:msg.config_id,config:structuredClone(configs[msg.config_id]),metadata:structuredClone(fixture.metadata.bindings[msg.config_id]||{device_id:fixture.controllers.find(x=>x.config_ids.includes(msg.config_id))?.device_id,verified:true}),revision:'config-'+counter};
   if(msg.type.endsWith('/config/save')){
     if(delaySave)await new Promise(resolve=>window.releaseSave=resolve);
     if(failSave)throw {code:failSave===true?'conflict':failSave,message:'Configurazione modificata altrove. Ricarica prima di salvare.'};
-    const id=msg.config.id||String(++counter+10);const helperChanged=msg.metadata?.selector_helper!==fixture.metadata.bindings[id]?.selector_helper;configs[id]={...structuredClone(msg.config),id,blueprint,enabled:helperChanged?false:msg.config.enabled};counter++;
+    const id=msg.config.id||String(++counter+10);const helperChanged=msg.metadata?.selector_helper!==fixture.metadata.bindings[id]?.selector_helper;
+    const sourceChanged=configs[id]&&configs[id].blueprint.id!==msg.config.blueprint;
+    configs[id]={...structuredClone(msg.config),id,blueprint:blueprints[msg.config.blueprint],enabled:helperChanged||sourceChanged?false:msg.config.enabled};counter++;
     if(msg.metadata)fixture.metadata.bindings[id]=structuredClone(msg.metadata);
     const device=fixture.controllers.find(x=>x.device_id===msg.metadata?.device_id);if(device&&!device.config_ids.includes(id))device.config_ids.push(id);
     return {config_id:id,config:structuredClone(configs[id]),metadata:structuredClone(msg.metadata),revision:'config-'+counter};
@@ -35,6 +38,11 @@ window.testHass={language:'it',states:{'light.desk':{entity_id:'light.desk',stat
   }
   if(msg.type.endsWith('/metadata/save')){for(const [ns,entries]of Object.entries(msg.patch))for(const [key,value]of Object.entries(entries))fixture.metadata[ns][key]=value;fixture.metadata_revision='meta-'+(++counter);if(msg.patch.controllers?.manual&&!fixture.controllers.some(x=>x.device_id==='manual'))fixture.controllers.push(controller('manual','Controller manuale','studio',[],'Unknown','unknown'));if(msg.patch.bindings)fixture.unassociated_configs=[];return {metadata:structuredClone(fixture.metadata),revision:fixture.metadata_revision};}
   if(msg.type.endsWith('/selector/get'))return structuredClone(helper);
+  if(msg.type.endsWith('/selector/create')){
+    const entity_id='input_select.draft_lights';
+    testHass.states[entity_id]={entity_id,state:msg.initial||msg.options[0],attributes:{friendly_name:msg.name,options:msg.options}};
+    return {entity_id};
+  }
   if(msg.type.endsWith('/selector/update')){if(window.helperFailure)throw {code:helperFailure,message:'Helper modificato: ricarica.'};helper={...helper,options:msg.options,active:msg.active||helper.active,initial:msg.initial||helper.initial,revision:'helper-'+(++counter)};return structuredClone(helper);}
   throw Error('Unhandled test transport: '+msg.type);
 },connection:{subscribeEvents:async()=>()=>{},subscribeMessage:async()=>()=>{}},themes:{darkMode:false},loadFragmentTranslation(){},loadBackendTranslation(){},localize:key=>key};

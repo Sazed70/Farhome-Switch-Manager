@@ -31,14 +31,22 @@ Nessuna release applicativa.
   le automazioni esterne dichiarate e i trigger Home Assistant con topic MQTT
   letterale o riferimento diretto al dispositivo. Template e gestori esterni non
   dichiarati possono richiedere una verifica a parte. Farhome non disattiva automazioni.
-- Selettore di sole luci con helper input_select esistente. Click e rotazioni
-  vengono assegnati singolarmente: gli altri gesti e il feedback avanzato restano
-  intatti. La luce viene letta all’evento e validata prima dell’azione dinamica.
+- In **Associazione e attivazione**, **Cambia blueprint** riapre il catalogo e mostra
+  le azioni da riconfigurare. Le azioni vengono trasferite solo quando sorgente e
+  regole dei gesti corrispondono in modo univoco. Il cambio avviene nella bozza.
+  Il salvataggio di un blueprint diverso disabilita la configurazione fino alla
+  riattivazione esplicita.
+- Il selettore di luci può creare un helper input_select dal pannello o riusarne
+  uno esistente. In una bozza puoi collegarlo e assegnare i gesti prima di salvare
+  e attivare il pulsante. **Crea e collega** crea l’helper nella categoria **Farhome**
+  della schermata Helper di Home Assistant. Gli helper riusati conservano la propria
+  categoria. **Salva gesti** registra il collegamento. La luce viene letta e validata
+  all’evento.
 - Elenco ordinato, luce attiva e iniziale distinti. «Applica elenco» è separato da
   «Salva gesti». Helper UI aggiornati tramite le API native persistenti; helper YAML
-  leggibili e utilizzabili, elenco in sola lettura. Per collegare un helper serve
-  una configurazione attiva già verificata; il cambio sorgente la disabilita fino
-  alla successiva attivazione esplicita.
+  leggibili e utilizzabili, elenco in sola lettura. La modifica di un elenco già
+  collegato richiede una configurazione attiva e verificata. Il cambio dell’helper
+  su una configurazione attiva la disabilita fino alla successiva attivazione.
 
 Non è stato aggiunto un catalogo di hardware Farhome collaudato. I blueprint
 ereditati rimangono disponibili; gli esempi sintetici HOBEIAN non dimostrano il
@@ -82,7 +90,7 @@ le suite, compreso ricaricamento del vero Store HA e del helper input_select.
 Il job Python usa Ubuntu 24.04, per cui GitHub Actions distribuisce Python 3.14.2,
 e basa la cache su `requirements-test.txt`.
 
-Prove locali: 64 test Python, 11 test Node, controllo
+Prove locali: 65 test Python, 11 test Node, controllo
 TypeScript, build e due suite browser. Le regressioni aggiunte verificano che il
 cambio di destinatario conservi i parametri del gesto, che la conferma del
 selettore sia disabilitata durante un salvataggio e si chiuda al cambio di gesto,

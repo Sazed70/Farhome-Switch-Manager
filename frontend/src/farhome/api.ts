@@ -16,5 +16,8 @@ export class FarhomeApi {
     return this.hass.callWS({type:'switch_manager/farhome/metadata/save',patch,expected_revision});
   }
   getSelector(entity_id:string,config_id:string):Promise<SelectorSnapshot>{return this.hass.callWS({type:'switch_manager/farhome/selector/get',entity_id,config_id});}
+  createSelector(name:string,options:string[],initial:string|null):Promise<{entity_id:string}>{
+    return this.hass.callWS({type:'switch_manager/farhome/selector/create',name,options,initial});
+  }
   updateSelector(value:SelectorSnapshot,config_id:string,options:string[],active:string|null,initial:string|null,dependencies_acknowledged:boolean):Promise<SelectorSnapshot>{return this.hass.callWS({type:'switch_manager/farhome/selector/update',entity_id:value.entity_id,config_id,options,active,initial,expected_revision:value.revision,dependencies_acknowledged});}
 }

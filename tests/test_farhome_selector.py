@@ -2,11 +2,13 @@
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+import asyncio
 
 from homeassistant.core import HomeAssistant
 from homeassistant.components.input_select import InputSelectStorageCollection, InputSelectStore, STORAGE_FIELDS
 from homeassistant.helpers.collection import IDManager, DictStorageCollectionWebsocket
+from homeassistant.helpers import category_registry as cr, device_registry as dr, entity_registry as er
 from homeassistant.helpers.script import Script, async_validate_actions_config
 from homeassistant.helpers import config_validation as cv
 from custom_components.switch_manager.const import DOMAIN, CONF_MANAGED_SWITCHES
@@ -60,6 +62,51 @@ class SelectorTests(unittest.IsolatedAsyncioTestCase):
     async def update(self, options=None, active=None, initial=None, ack=False, revision=None):
         current = await async_read_selector(self.hass, 'input_select.renamed', config_id='1')
         return await async_update_selector(self.hass, 'input_select.renamed', options or ['light.a', 'light.b'], active, initial, revision or current['revision'], ack, config_id='1')
+
+    async def test_create_ordered_helper_uses_registry_id_and_retries_without_duplicates(self):
+        from custom_components.switch_manager.farhome.selector import async_create_selector
+
+        await cr.async_load(self.hass, load_empty=True)
+        categories = cr.async_get(self.hass)
+        existing = categories.async_create(scope='helpers', name='My category')
+        unrelated = categories.async_create(scope='automations', name='Farhome')
+        self.patches[1].stop()
+        dr.async_setup(self.hass)
+        await dr.async_load(self.hass, load_empty=True)
+        registry = er.EntityRegistry(self.hass)
+        with patch.object(self.hass, 'config_entries', SimpleNamespace(async_wait_initialized=AsyncMock())):
+            await registry.async_load(load_empty=True)
+
+        async def register(kind, item_id, config):
+            entry = registry.async_get_or_create('input_select', 'input_select', item_id, suggested_object_id=f'registry_{item_id}')
+            self.hass.states.async_set(entry.entity_id, config.get('initial', config['options'][0]), {'options': config['options']})
+
+        self.collection.async_add_listener(register)
+        await register(None, self.item['id'], self.item)
+        existing_entity = registry.async_get_entity_id('input_select', 'input_select', self.item['id'])
+        registry.async_update_entity(existing_entity, categories={'helpers': existing.category_id})
+        before = self.metadata.snapshot()
+        with patch('custom_components.switch_manager.farhome.selector.er.async_get', return_value=registry):
+            a, b = await asyncio.gather(*(
+                async_create_selector(self.hass, 'Lights', ['light.b', 'light.a'], 'light.a') for _ in range(2)
+            ))
+            self.assertEqual(len(self.collection.async_items()), 2)
+            second = await async_create_selector(self.hass, 'More lights', ['light.a'], None)
+            reused = await async_create_selector(self.hass, self.item['name'], self.item['options'], self.item['initial'])
+            with self.assertRaisesRegex(ValueError, 'helper_name_exists'):
+                await async_create_selector(self.hass, 'Lights', ['light.a'], None)
+        self.assertEqual(a, b)
+        self.assertEqual(a['entity_id'], 'input_select.registry_lights')
+        self.assertEqual(self.collection.async_items()[1]['options'], ['light.b', 'light.a'])
+        self.assertEqual(self.collection.async_items()[1]['initial'], 'light.a')
+        self.assertEqual(self.metadata.snapshot(), before)
+        farhome = [entry for entry in categories.async_list_categories(scope='helpers') if entry.name == 'Farhome']
+        self.assertEqual(len(farhome), 1)
+        self.assertNotEqual(farhome[0].category_id, unrelated.category_id)
+        for created in (a, second):
+            self.assertEqual(registry.async_get(created['entity_id']).categories['helpers'], farhome[0].category_id)
+        self.assertEqual(reused['entity_id'], existing_entity)
+        self.assertEqual(registry.async_get(existing_entity).categories['helpers'], existing.category_id)
 
     async def test_yaml_options_are_read_only(self):
         self.er.async_get = lambda key: None
