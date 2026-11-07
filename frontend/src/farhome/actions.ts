@@ -4,6 +4,7 @@ import type {SelectorAction,SelectorKind} from './types.js';
 const modes = ['single','restart','queued','parallel'];
 const domains = ['light','fan','switch','scene','script'];
 const entityPattern = /^(light|fan|switch|scene|script)\.[a-z0-9_]+$/;
+const areaPattern = /^[a-z0-9_]+$/;
 const record = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value,key);
 const number = (value: unknown, min: number, max=Infinity) => typeof value === 'number' && Number.isFinite(value) && value>=min && value<=max;
@@ -20,10 +21,18 @@ export function serviceFor(domain: Domain, kind: QuickKind): string|null {
 }
 
 export function buildQuickAction(value: QuickAction): SwitchConfigButtonAction {
-  if (!value||!domains.includes(value.domain)||!entityPattern.test(value.entity_id)||!value.entity_id.startsWith(value.domain+'.')||!modes.includes(value.mode)) throw new Error('invalid_quick_action');
+  if (!value||!domains.includes(value.domain)||!modes.includes(value.mode)) throw new Error('invalid_quick_action');
+  const isArea = !!value.area_id;
+  const isEntity = !!value.entity_id;
+  if ((isArea && isEntity) || (!isArea && !isEntity)) throw new Error('invalid_quick_action');
+  if (isArea) {
+    if (!areaPattern.test(value.area_id!) || !['light','fan','switch'].includes(value.domain) || !['toggle','on','off'].includes(value.kind)) throw new Error('invalid_quick_action');
+  } else {
+    if (!entityPattern.test(value.entity_id!) || !value.entity_id!.startsWith(value.domain+'.')) throw new Error('invalid_quick_action');
+  }
   const service=serviceFor(value.domain,value.kind);
   if (!service) throw new Error('invalid_quick_action');
-  const allowed=['domain','kind','entity_id','mode','loop','loop_interval','alias','service_key','data_present'];
+  const allowed=['domain','kind','entity_id','area_id','mode','loop','loop_interval','alias','service_key','data_present'];
   if(value.domain==='light')allowed.push('transition');
   if(value.kind==='increase'||value.kind==='decrease')allowed.push('step');
   if(value.domain==='light'&&['on','toggle'].includes(value.kind))allowed.push('brightness_pct','color_temp_kelvin');
@@ -48,7 +57,8 @@ export function buildQuickAction(value: QuickAction): SwitchConfigButtonAction {
     if(!number(item,key==='color_temp_kelvin'?Number.MIN_VALUE:0,['brightness_pct','percentage'].includes(key)?100:Infinity))throw new Error('invalid_parameter');
     data[key]=item;
   }
-  const step:Record<string,unknown>={[value.service_key||'action']:service,target:{entity_id:value.entity_id}};
+  const target: Record<string,string> = isArea ? {area_id: value.area_id!} : {entity_id: value.entity_id!};
+  const step:Record<string,unknown>={[value.service_key||'action']:service,target};
   if(Object.keys(data).length||value.data_present)step.data=data;
   if(value.alias!==undefined)step.alias=value.alias;
   const result:SwitchConfigButtonAction={mode:value.mode,sequence:[step]};
@@ -60,11 +70,20 @@ export function buildQuickAction(value: QuickAction): SwitchConfigButtonAction {
 export function parseQuickAction(action: SwitchConfigButtonAction): QuickAction|null {
   if(!record(action)||!only(action,['mode','sequence','loop','loop_interval'])||!modes.includes(action.mode)||!Array.isArray(action.sequence)||action.sequence.length!==1)return null;
   const item=action.sequence[0];
-  if(!record(item)||!only(item,['action','service','target','data','alias'])||has(item,'action')===has(item,'service')||!record(item.target)||!only(item.target,['entity_id'])||typeof item.target.entity_id!=='string'||!entityPattern.test(item.target.entity_id))return null;
+  if(!record(item)||!only(item,['action','service','target','data','alias'])||has(item,'action')===has(item,'service')||!record(item.target))return null;
+  const hasEntity = typeof item.target.entity_id === 'string' && entityPattern.test(item.target.entity_id);
+  const hasArea = typeof item.target.area_id === 'string' && areaPattern.test(item.target.area_id);
+  if ((hasEntity && hasArea) || (!hasEntity && !hasArea)) return null;
+  if (hasEntity && !only(item.target, ['entity_id'])) return null;
+  if (hasArea && !only(item.target, ['area_id'])) return null;
   const key=has(item,'action')?'action':'service';
   const service=item[key];
-  const domain=item.target.entity_id.split('.')[0] as Domain;
-  if(typeof service!=='string'||!service.startsWith(domain+'.')||(has(item,'data')&&!record(item.data)))return null;
+  if (typeof service !== 'string') return null;
+  const domain=service.split('.')[0] as Domain;
+  if (!domains.includes(domain)) return null;
+  if (hasEntity && !item.target.entity_id.startsWith(domain + '.')) return null;
+  if (hasArea && !['light', 'fan', 'switch'].includes(domain)) return null;
+  if (has(item,'data') && !record(item.data)) return null;
   const data=item.data||{};
   let kind:QuickKind;
   const name=service.slice(domain.length+1);
@@ -74,7 +93,10 @@ export function parseQuickAction(action: SwitchConfigButtonAction): QuickAction|
   else if(domain==='light'&&name==='turn_on'&&has(data,'brightness_step_pct'))kind=data.brightness_step_pct>0?'increase':'decrease';
   else if(['light','fan','switch'].includes(domain)&&['toggle','turn_on','turn_off'].includes(name))kind=name==='toggle'?'toggle':name==='turn_on'?'on':'off';
   else return null;
-  const value:QuickAction={domain,kind,entity_id:item.target.entity_id,mode:action.mode as ScriptMode,service_key:key};
+  if (hasArea && !['toggle', 'on', 'off'].includes(kind)) return null;
+  const value:QuickAction={domain,kind,mode:action.mode as ScriptMode,service_key:key};
+  if (hasEntity) value.entity_id = item.target.entity_id;
+  if (hasArea) value.area_id = item.target.area_id;
   if(has(action,'loop'))value.loop=action.loop;
   if(has(action,'loop_interval'))value.loop_interval=action.loop_interval;
   if(has(item,'alias'))value.alias=item.alias;
@@ -102,7 +124,14 @@ export function supportsBrightness(entity: EntityState): boolean {
 
 export function buildSelectorAction(helper_id:string,kind:SelectorKind,step=10,transition=.1,mode:ScriptMode='restart'):SwitchConfigButtonAction {
   if(!/^input_select\.[a-z0-9_]+$/.test(helper_id)||!['next','brightness_up','brightness_down'].includes(kind)||!number(step,Number.MIN_VALUE,100)||!number(transition,0,3600)||!modes.includes(mode))throw new Error('invalid_selector_action');
-  const sequence=kind==='next'?[{action:'input_select.select_next',target:{entity_id:helper_id},data:{cycle:true}}]:[
+  const sequence=kind==='next'?[
+    {action:'input_select.select_next',target:{entity_id:helper_id},data:{cycle:true}},
+    {variables:{farhome_selected_light:`{{ states('${helper_id}') }}`}},
+    {condition:'template',value_template:`{{ farhome_selected_light is string and farhome_selected_light is match('^light[.][a-z0-9_]+$') and farhome_selected_light in (state_attr('${helper_id}', 'options') or []) and has_value(farhome_selected_light) }}`},
+    {action:'light.toggle',target:{entity_id:'{{ farhome_selected_light }}'}},
+    {delay:{milliseconds:500}},
+    {action:'light.toggle',target:{entity_id:'{{ farhome_selected_light }}'}},
+  ]:[
     {variables:{farhome_selected_light:`{{ states('${helper_id}') }}`}},
     {condition:'template',value_template:`{{ farhome_selected_light is string and farhome_selected_light is match('^light[.][a-z0-9_]+$') and farhome_selected_light in (state_attr('${helper_id}', 'options') or []) and has_value(farhome_selected_light) }}`},
     {action:'light.turn_on',target:{entity_id:'{{ farhome_selected_light }}'},data:{brightness_step_pct:kind==='brightness_up'?step:-step,transition}},
@@ -122,13 +151,23 @@ export function parseSelectorAction(action:SwitchConfigButtonAction):SelectorAct
       step=Math.abs(data?.brightness_step_pct);transition=data?.transition;
     }
     if(!helper_id)continue;
-    try{const generated=buildSelectorAction(helper_id,kind,step,transition,action.mode as ScriptMode);
+    try{
+      const generated=buildSelectorAction(helper_id,kind,step,transition,action.mode as ScriptMode);
       // Key ordering is irrelevant, unknown keys are not. Conservative comparison.
       const canonical=(v:any):string=>JSON.stringify(v,(_key,item)=>record(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
-      if(canonical(generated.sequence)===canonical(action.sequence))return {helper_id,kind,step,transition,mode:action.mode as ScriptMode};
+      const canonAct=canonical(action.sequence);
+      if(canonical(generated.sequence)===canonAct || (kind==='next'&&canonical([{action:'input_select.select_next',target:{entity_id:helper_id},data:{cycle:true}}])===canonAct))return {helper_id,kind,step,transition,mode:action.mode as ScriptMode};
     }catch{}
   }
   return null;
+}
+
+export function supportedAreaQuickActions(): ActionOption[] {
+  return [
+    {kind: 'toggle', label_key: 'action_toggle'},
+    {kind: 'on', label_key: 'action_on'},
+    {kind: 'off', label_key: 'action_off'},
+  ];
 }
 
 export function supportedQuickActions(entity: EntityState|undefined, services: ServiceMap): ActionOption[] {

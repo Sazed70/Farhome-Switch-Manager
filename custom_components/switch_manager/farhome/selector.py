@@ -190,7 +190,14 @@ def build_selector_action(helper_id, kind, step=10, transition=.1, mode='restart
     if type(step) not in (float, int) or not 0 < step <= 100 or type(transition) not in (float, int) or not 0 <= transition <= 3600:
         raise ValueError('invalid_selector_parameters')
     if kind == 'next':
-        sequence = [{'action': 'input_select.select_next', 'target': {'entity_id': helper_id}, 'data': {'cycle': True}}]
+        sequence = [
+            {'action': 'input_select.select_next', 'target': {'entity_id': helper_id}, 'data': {'cycle': True}},
+            {'variables': {'farhome_selected_light': "{{ states('" + helper_id + "') }}"}},
+            {'condition': 'template', 'value_template': "{{ farhome_selected_light is string and farhome_selected_light is match('^light[.][a-z0-9_]+$') and farhome_selected_light in (state_attr('" + helper_id + "', 'options') or []) and has_value(farhome_selected_light) }}"},
+            {'action': 'light.toggle', 'target': {'entity_id': '{{ farhome_selected_light }}'}},
+            {'delay': {'milliseconds': 500}},
+            {'action': 'light.toggle', 'target': {'entity_id': '{{ farhome_selected_light }}'}},
+        ]
     else:
         # Capture once at the event, then validate before resolving a dynamic target.
         sequence = [

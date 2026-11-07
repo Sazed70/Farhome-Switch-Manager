@@ -58,3 +58,17 @@ class QuickActionValidationTests(unittest.IsolatedAsyncioTestCase):
         self.hass.services.async_remove('fan','increase_speed')
         with self.assertRaisesRegex(ValueError,'unknown_service'):
             validate_quick_action(self.hass,{'domain':'fan','kind':'increase','entity_id':'fan.air','step':10,'mode':'single'})
+
+    def test_area_target_supported_for_light_fan_switch(self):
+        from unittest.mock import patch, MagicMock
+        mock_ar = MagicMock()
+        mock_ar.async_get_area.side_effect = lambda aid: MagicMock(id=aid) if aid == 'camera_ilario' else None
+        with patch('homeassistant.helpers.area_registry.async_get', return_value=mock_ar):
+            res = validate_quick_action(self.hass, {'domain': 'light', 'kind': 'toggle', 'area_id': 'camera_ilario', 'mode': 'single'})
+            self.assertEqual(res, {'mode': 'single', 'sequence': [{'action': 'light.toggle', 'target': {'area_id': 'camera_ilario'}}]})
+            with self.assertRaisesRegex(ValueError, 'unknown_target'):
+                validate_quick_action(self.hass, {'domain': 'light', 'kind': 'toggle', 'area_id': 'non_existent_room', 'mode': 'single'})
+            with self.assertRaisesRegex(ValueError, 'unsupported_area_action'):
+                validate_quick_action(self.hass, {'domain': 'light', 'kind': 'increase', 'area_id': 'camera_ilario', 'mode': 'single', 'step': 10})
+            with self.assertRaisesRegex(ValueError, 'invalid_quick_action'):
+                validate_quick_action(self.hass, {'domain': 'light', 'kind': 'toggle', 'area_id': 'camera_ilario', 'entity_id': 'light.desk', 'mode': 'single'})

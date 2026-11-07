@@ -58,12 +58,20 @@ test('invalid numeric values and HTML-like entity IDs cannot become actions',()=
   for(const step of [0,-10,101,NaN,Infinity])assert.throws(()=>buildQuickAction({domain:'fan',kind:'increase',entity_id:'fan.air',mode:'single',step}));
   assert.throws(()=>buildQuickAction({domain:'light',kind:'on',entity_id:'light.<img onerror=alert(1)>',mode:'single'}));
 });
-test('multiple entity, area targets and template expressions stay advanced',()=>{
-  for(const target of [{entity_id:['light.desk']},{area_id:'room'},{entity_id:'{{ states("input_select.synthetic") }}'}]){
+test('multiple entity targets and template expressions stay advanced',()=>{
+  for(const target of [{entity_id:['light.desk']},{entity_id:'{{ states("input_select.synthetic") }}'}]){
     assert.equal(parseQuickAction({mode:'single',sequence:[{action:'light.turn_on',target}]}),null);
   }
 });
-test('selector captures current light at the event and preserves independent advanced gestures',async()=>{
+test('area targets build and parse native area actions for light, fan and switch',()=>{
+  const areaAction = {mode:'single',sequence:[{action:'light.toggle',target:{area_id:'camera_ilario'}}]};
+  const parsed = parseQuickAction(areaAction);
+  assert.equal(parsed.domain,'light');
+  assert.equal(parsed.kind,'toggle');
+  assert.equal(parsed.area_id,'camera_ilario');
+  assert.deepEqual(buildQuickAction(parsed), areaAction);
+});
+test('selector captures current light at the event and provides visual toggle feedback',async()=>{
   const {buildSelectorAction,parseSelectorAction}=await import('../.test-build/farhome/actions.js');
   const feedback={mode:'restart',sequence:[{action:'light.toggle',target:{entity_id:'light.a'}},{delay:{milliseconds:500}},{action:'light.toggle',target:{entity_id:'light.a'}}]};
   const original=structuredClone(feedback);
@@ -75,4 +83,13 @@ test('selector captures current light at the event and preserves independent adv
   assert.equal(parseSelectorAction(feedback),null);
   assert.deepEqual(feedback,original);
   assert.throws(()=>buildSelectorAction('input_select.bad\'id','next',10,.1));
+  const nextAct=buildSelectorAction('input_select.renamed','next');
+  assert.equal(nextAct.sequence.length,6);
+  assert.equal(nextAct.sequence[0].action,'input_select.select_next');
+  assert.equal(nextAct.sequence[3].action,'light.toggle');
+  assert.deepEqual(nextAct.sequence[4].delay,{milliseconds:500});
+  assert.equal(nextAct.sequence[5].action,'light.toggle');
+  assert.deepEqual(parseSelectorAction(nextAct),{helper_id:'input_select.renamed',kind:'next',step:10,transition:.1,mode:'restart'});
+  const legacyNext={mode:'restart',sequence:[{action:'input_select.select_next',target:{entity_id:'input_select.renamed'},data:{cycle:true}}]};
+  assert.deepEqual(parseSelectorAction(legacyNext),{helper_id:'input_select.renamed',kind:'next',step:10,transition:.1,mode:'restart'});
 });
