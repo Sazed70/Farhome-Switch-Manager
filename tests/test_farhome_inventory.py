@@ -73,17 +73,18 @@ class InventoryTests(unittest.TestCase):
         }
 
         def suggestion(mode, available=catalog):
-            item = {**definitions[0], "operation_mode": mode}
+            item = {**definitions[0], "friendly_name": "Studio/Desk knob", "operation_mode": mode}
             result = build_inventory(areas, devices, [], {}, metadata, [item], blueprints=available)
             self.assertEqual(result["controllers"][0]["compatibility"], "unverified")
             return result["controllers"][0]["blueprint_suggestion"]
 
         self.assertEqual(suggestion("event")["id"], event_id)
+        self.assertEqual(suggestion("event")["identifier"], "z2m/Studio/Desk knob/action")
         self.assertEqual(suggestion("command")["id"], state_id)
         for mode in (None, "unknown", "unavailable"):
             hint = suggestion(mode)
             self.assertEqual((hint["id"], hint["mode"], hint["reason"]), (event_id, "event", "mode_unknown"))
-            self.assertEqual(hint["alternative"], {"id": state_id, "name": "State", "mode": "command"})
+            self.assertEqual(hint["alternative"], {"id": state_id, "name": "State", "mode": "command", "identifier": "z2m/Studio/Desk knob"})
         self.assertIsNone(suggestion("event", {state_id: catalog[state_id]}))
 
     def test_loginovo_clicks_are_conditional_when_mode_is_unavailable(self):
@@ -114,6 +115,9 @@ class InventoryTests(unittest.TestCase):
             return result["controllers"][0]["blueprint_suggestion"]
 
         self.assertEqual(suggestion([item])["reason"], "gestures")
+        shared_topic = {**item, "ieee_address": "0x998877"}
+        self.assertNotIn("identifier", suggestion([item, shared_topic]))
+        self.assertNotIn("identifier", suggestion([{**item, "friendly_name": "room/+"}]))
         self.assertIsNone(suggestion([item, {**item, "base_topic": "other"}]))
         item["definition"]["exposes"][0]["values"] = ["single"]
         self.assertIsNone(suggestion([item]))

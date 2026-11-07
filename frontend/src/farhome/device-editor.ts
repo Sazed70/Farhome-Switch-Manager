@@ -1,10 +1,12 @@
 import {LitElement,html,css,nothing} from 'lit';
 import {customElement,property,state} from 'lit/decorators.js';
+import {live} from 'lit/directives/live.js';
+import {repeat} from 'lit/directives/repeat.js';
 import type {Blueprint,Route} from '../types.js';
 import {createEmptyConfig} from '../helpers.js';
-import type {FarhomeHass,Controller,ConfigEnvelope,EditableConfig,Binding,QuickAction,QuickPatch,Domain,ScriptMode,SelectorPatch,SelectorKind} from './types.js';
+import type {FarhomeHass,Controller,BlueprintChoice,ConfigEnvelope,EditableConfig,Binding,QuickAction,QuickPatch,Domain,ScriptMode,SelectorPatch,SelectorKind} from './types.js';
 import {FarhomeApi} from './api.js';
-import {t,TextKey} from './i18n.js';
+import {t,TextKey,errorKey,gestureTitle} from './i18n.js';
 import {controls} from './styles.js';
 import {dialogKeys} from './dialog.js';
 import {buildQuickAction,parseQuickAction,supportedQuickActions,supportsBrightness,buildSelectorAction,parseSelectorAction} from './actions.js';
@@ -23,7 +25,7 @@ export class FarhomeDeviceEditor extends LitElement{
   @state() private binding?:Binding;
   @state() private loading=false;
   @state() private busy=false;
-  @state() private error='';
+  @state() private error?:TextKey;
   @state() private saved=false;
   @state() private dirty=false;
   @state() private selected='0:0';
@@ -32,6 +34,7 @@ export class FarhomeDeviceEditor extends LitElement{
   @state() private newBlueprint='';
   @state() private newIdentifier='';
   @state() private newName='';
+  @state() private blueprintSearch='';
   @state() private preparing=false;
   @state() private showAdvanced=false;
   @state() private replacePending=false;
@@ -46,8 +49,10 @@ export class FarhomeDeviceEditor extends LitElement{
   private quick=new Map<string,QuickAction>();
   protected selectors=new Map<string,SelectorPatch>();
   private token=0;
+  private suggestedIdentifier=false;
   private text=(key:TextKey)=>t(this.hass?.language,key);
   private get api(){return new FarhomeApi(this.hass);}
+  private get showsSetupForm(){return !this.draft&&!this.loading&&!this.readonly&&(!this.controller.config_ids.length||this.preparing);}
   private blueprintHint(){
     const suggestion=this.controller.blueprint_suggestion;
     const assigned=this.blueprint;
@@ -63,7 +68,11 @@ export class FarhomeDeviceEditor extends LitElement{
     return html`<div class="notice">
       <h3>${this.text('blueprint_suggested')}</h3>
       <p class="muted">${reason}</p>
-      ${choices.map(choice=>html`<p>${conditional?`${this.text(choice.mode==='event'?'blueprint_if_event':'blueprint_if_command')} · `:nothing}<strong>${choice.name}</strong></p>`)}
+      ${choices.map(choice=>html`<div class="row blueprint-choice">
+        <p>${conditional?`${this.text(choice.mode==='event'?'blueprint_if_event':'blueprint_if_command')} · `:nothing}<strong>${choice.name}</strong></p>
+        ${this.showsSetupForm?html`<button type="button" aria-label=${`${this.text('blueprint_use')} · ${choice.name}`}
+          ?disabled=${!this.blueprints[choice.id]} @click=${()=>this.applySuggestion(choice)}>${this.text('blueprint_use')}</button>`:nothing}
+      </div>`)}
       ${assigned?html`<p>${this.text('blueprint_assigned')} · ${assigned.name}</p>`:nothing}
     </div>`;
   }
@@ -81,16 +90,15 @@ export class FarhomeDeviceEditor extends LitElement{
     if(changed.has('replacePending')&&this.replacePending)this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
   }
   private async openController(){
-    this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error='';this.saved=false;this.preparing=false;this.pickedConfig='';this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.markDirty(false);
+    this.token++;this.envelope=undefined;this.draft=undefined;this.binding=undefined;this.error=undefined;this.saved=false;this.loading=false;this.preparing=false;this.pickedConfig='';this.helperDirty=false;this.helperBusy=false;this.helperChoice='';this.quick.clear();this.selectors.clear();this.resetSetupForm();this.markDirty(false);
     if(this.controller.config_ids.length===1){this.pickedConfig=this.controller.config_ids[0];await this.load(this.pickedConfig);}
     else if(!this.controller.config_ids.length)await this.loadBlueprints();
   }
-  private async loadBlueprints(){try{const result=await this.hass.callWS<{blueprints:Record<string,Blueprint>}>({type:'switch_manager/blueprints'});this.blueprints=result.blueprints;}catch(err){this.error=this.message(err);}}
-  private message(err:unknown){const value=err as {message?:string;code?:string};return value?.message||value?.code||this.text('load_error');}
+  private async loadBlueprints(){try{const result=await this.hass.callWS<{blueprints:Record<string,Blueprint>}>({type:'switch_manager/blueprints'});this.blueprints=result.blueprints;}catch(err){this.error=errorKey(err,'load_error');}}
   private adopt(value:ConfigEnvelope){
     this.envelope=value;this.draft=structuredClone(value.config);this.binding={...(value.metadata||{device_id:this.controller.device_id})};this.quick.clear();this.selectors.clear();this.markDirty(false);this.conflictChecked=false;this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;
   }
-  async load(id:string){const token=++this.token;this.loading=true;this.error='';try{const value=await this.api.get(id);if(token===this.token)this.adopt(value);}catch(err){if(token===this.token)this.error=this.message(err);}finally{if(token===this.token)this.loading=false;}}
+  async load(id:string){const token=++this.token;this.loading=true;this.error=undefined;try{const value=await this.api.get(id);if(token===this.token)this.adopt(value);}catch(err){if(token===this.token)this.error=errorKey(err,'load_error');}finally{if(token===this.token)this.loading=false;}}
   private emitDirty(){this.dispatchEvent(new CustomEvent('dirty-changed',{detail:{dirty:this.hasDirty},bubbles:true,composed:true}));}
   private markDirty(value=true){this.dirty=value;this.saved=false;this.emitDirty();}
   private changed(){this.draft={...this.draft!};this.markDirty();}
@@ -98,7 +106,7 @@ export class FarhomeDeviceEditor extends LitElement{
     if(this.busy||this.readonly)return;
     this.quick.set(this.selected,value);
     this.selectors.delete(this.selected);
-    try{const [b,a]=this.indices;this.draft!.buttons[b].actions[a]=buildQuickAction(value);this.error='';}catch{this.error=this.text('invalid_form');}
+    try{const [b,a]=this.indices;this.draft!.buttons[b].actions[a]=buildQuickAction(value);this.error=undefined;}catch{this.error='invalid_form';}
     this.showAdvanced=false;this.changed();
   }
   private useQuick(){
@@ -147,28 +155,79 @@ export class FarhomeDeviceEditor extends LitElement{
     </div>${!options.length?html`<p class="notice">${this.text('no_options')}</p>`:nothing}`;
   }
   private async prepare(){
-    this.preparing=true;this.error='';
+    this.preparing=true;this.error=undefined;
     if(this.draft){this.draft={...structuredClone(this.draft),id:null,enabled:false,name:this.draft.name+' Farhome'};this.envelope=undefined;this.binding={device_id:this.controller.device_id,verified:false};this.markDirty();}
     else await this.loadBlueprints();
   }
+  private resetSetupForm(){
+    this.newName='';
+    this.newBlueprint='';
+    this.newIdentifier='';
+    this.blueprintSearch='';
+    this.suggestedIdentifier=false;
+  }
+  private selectBlueprint(id:string){
+    if(id!==this.newBlueprint&&this.suggestedIdentifier){
+      this.newIdentifier='';
+      this.suggestedIdentifier=false;
+    }
+    this.newBlueprint=id;
+    this.markDirty();
+  }
+  private applySuggestion(choice:BlueprintChoice){
+    this.selectBlueprint(choice.id);
+    if(!this.newName.trim())this.newName=this.controller.name.slice(0,255);
+    if(choice.identifier&&choice.identifier.length<=1024){
+      this.newIdentifier=choice.identifier;
+      this.suggestedIdentifier=true;
+    }
+    this.blueprintSearch='';
+    this.error=undefined;
+  }
+  private setupForm(){
+    const terms=this.blueprintSearch.trim().toLocaleLowerCase(this.hass.language).split(/\s+/).filter(Boolean);
+    const suggestion=this.controller.blueprint_suggestion;
+    const catalog=Object.values(this.blueprints).sort((a,b)=>a.name.localeCompare(b.name,this.hass.language)||a.service.localeCompare(b.service,this.hass.language));
+    const results=catalog.filter(blueprint=>{
+      const model=blueprint.id===suggestion?.id||blueprint.id===suggestion?.alternative?.id?this.controller.model:'';
+      const searchable=`${blueprint.name} ${blueprint.id} ${blueprint.service} ${model}`.toLocaleLowerCase(this.hass.language);
+      return terms.every(term=>searchable.includes(term));
+    });
+    const selected=this.blueprints[this.newBlueprint];
+    const options=selected&&!results.includes(selected)?[selected,...results]:results;
+    return html`<form class="stack" @submit=${(e:Event)=>{e.preventDefault();this.createDraft();}}>
+      <p>${this.text('no_config')}</p>
+      <label>${this.text('name')}<input required maxlength="255" .value=${this.newName} @input=${(e:Event)=>{this.newName=(e.target as HTMLInputElement).value;this.markDirty();}}></label>
+      <label>${this.text('blueprint_search')}<input type="search" .value=${this.blueprintSearch}
+        @input=${(e:Event)=>this.blueprintSearch=(e.target as HTMLInputElement).value}
+        @keydown=${(e:KeyboardEvent)=>{if(e.key==='Enter')e.preventDefault();}}></label>
+      <label>${this.text('blueprint')}<select required @change=${(e:Event)=>this.selectBlueprint((e.target as HTMLSelectElement).value)}>
+        <option value="" .selected=${live(!this.newBlueprint)}>${this.text('choose')}</option>
+        ${repeat(options,value=>value.id,value=>html`<option value=${value.id} .selected=${live(value.id===this.newBlueprint)}>${value.name} · ${value.service}</option>`)}
+      </select></label>
+      ${terms.length&&!results.length?html`<p class="muted" role="status">${this.text('blueprint_no_results')}</p>`:nothing}
+      <label>${this.text('identifier')}<input required maxlength="1024" .value=${this.newIdentifier} @input=${(e:Event)=>{this.newIdentifier=(e.target as HTMLInputElement).value;this.suggestedIdentifier=false;this.markDirty();}}></label>
+      <button type="submit">${this.text('create_draft')}</button>
+    </form>`;
+  }
   private async createDraft(){
-    const blueprint=this.blueprints[this.newBlueprint];if(!blueprint||!this.newIdentifier.trim()||!this.newName.trim()){this.error=this.text('invalid_form');return;}
-    this.draft={...createEmptyConfig(blueprint),id:null,name:this.newName,identifier:this.newIdentifier,enabled:false};this.binding={device_id:this.controller.device_id,verified:false};this.preparing=true;this.markDirty();
+    const blueprint=this.blueprints[this.newBlueprint];if(!blueprint||!this.newIdentifier.trim()||!this.newName.trim()){this.error='invalid_form';return;}
+    this.draft={...createEmptyConfig(blueprint),id:null,name:this.newName,identifier:this.newIdentifier,enabled:false};this.binding={device_id:this.controller.device_id,verified:false};this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;this.preparing=true;this.markDirty();
   }
   async save(forNavigation=false):Promise<boolean>{
-    if(forNavigation&&this.helperDirty){this.error=this.text('helper_draft_pending');return false;}
+    if(forNavigation&&this.helperDirty){this.error='helper_draft_pending';return false;}
     if(this.busy||!this.draft||this.readonly)return false;
     const inputs=this.renderRoot.querySelectorAll('input');for(const input of inputs)if(!input.reportValidity())return false;
-    this.busy=true;this.error='';
+    this.busy=true;this.error=undefined;
     try{
       const quick_actions:QuickPatch[]=Array.from(this.quick,([key,value])=>{buildQuickAction(value);const [button,action]=key.split(':').map(Number);return {button,action,value};});
       const response=await this.api.save(structuredClone(this.draft),this.binding,this.envelope?.revision,quick_actions,Array.from(this.selectors.values()));
       const selected=this.selected;this.adopt(response);this.selected=selected;this.saved=true;
       this.dispatchEvent(new CustomEvent('save',{detail:response,bubbles:true,composed:true}));return true;
-    }catch(err){this.error=this.message(err);return false;}finally{this.busy=false;}
+    }catch(err){this.error=errorKey(err,'save_error');return false;}finally{this.busy=false;}
   }
-  discard(){this.renderRoot.querySelector<FarhomeSelectorEditor>('farhome-selector-editor')?.discard();this.helperDirty=false;if(this.envelope)this.adopt(this.envelope);else{this.draft=undefined;this.markDirty(false);}this.dispatchEvent(new CustomEvent('cancel',{bubbles:true,composed:true}));}
-  private async toggle(){if(!this.envelope||this.dirty||this.busy)return;this.busy=true;this.error='';try{const value=await this.api.setEnabled(this.envelope.config_id,!this.draft!.enabled,this.envelope.revision,this.conflictChecked);this.adopt(value);this.dispatchEvent(new CustomEvent('save',{detail:value,bubbles:true,composed:true}));}catch(err){this.error=this.message(err);}finally{this.busy=false;}}
+  discard(){this.renderRoot.querySelector<FarhomeSelectorEditor>('farhome-selector-editor')?.discard();this.helperDirty=false;if(this.envelope)this.adopt(this.envelope);else{this.draft=undefined;this.resetSetupForm();this.markDirty(false);}this.dispatchEvent(new CustomEvent('cancel',{bubbles:true,composed:true}));}
+  private async toggle(){if(!this.envelope||this.dirty||this.busy)return;this.busy=true;this.error=undefined;try{const value=await this.api.setEnabled(this.envelope.config_id,!this.draft!.enabled,this.envelope.revision,this.conflictChecked);this.adopt(value);this.dispatchEvent(new CustomEvent('save',{detail:value,bubbles:true,composed:true}));}catch(err){this.error=errorKey(err,'activation_error');}finally{this.busy=false;}}
   private get canLinkHelper(){return !!this.envelope&&!!this.draft?.enabled&&!!this.binding?.verified&&!!this.binding?.conflicts_checked&&!this.readonly;}
   protected selectorSection(){
     if(this.readonly)return nothing;
@@ -179,7 +238,7 @@ export class FarhomeDeviceEditor extends LitElement{
       ${helper&&this.envelope?html`<farhome-selector-editor .hass=${this.hass} .entityId=${helper} .configId=${this.envelope.config_id} .allowed=${this.canLinkHelper&&!this.busy&&helper===this.envelope.metadata?.selector_helper} @helper-dirty-changed=${(e:CustomEvent)=>{this.helperDirty=e.detail.dirty;this.helperBusy=e.detail.busy;this.emitDirty();}}></farhome-selector-editor>`:nothing}
     </div></details>`;
   }
-  private applySelector(){const helper=this.binding?.selector_helper;if(this.busy||this.readonly||!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,value);this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error=this.text('invalid_form');}}
+  private applySelector(){const helper=this.binding?.selector_helper;if(this.busy||this.readonly||!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,value);this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error='invalid_form';}}
   protected selectorGesture(){
     const helper=this.binding?.selector_helper;
     if(!helper||this.readonly||!this.action)return nothing;
@@ -194,20 +253,20 @@ export class FarhomeDeviceEditor extends LitElement{
     return html`<section class="stack" aria-label=${this.controller.name}>
       <header class="device-heading"><farhome-thumbnail large .asset=${this.controller.image}></farhome-thumbnail><div><h2>${this.controller.name}</h2><p class="muted">${this.controller.manufacturer} ${this.controller.model}</p><p class="status">${this.text(this.controller.management==='farhome'?'managed':this.controller.management==='external'?'external':'unknown')} · ${this.text(this.controller.compatibility==='verified'?'verified':'unverified')}</p></div></header>
       ${this.blueprintHint()}
-      ${this.error?html`<div class="notice" role="alert">${this.error}${!this.draft?html` <button @click=${()=>this.pickedConfig?this.load(this.pickedConfig):this.loadBlueprints()}>${this.text('retry')}</button>`:nothing}</div>`:nothing}
+      ${this.error?html`<div class="notice" role="alert">${this.text(this.error)}${!this.draft?html` <button @click=${()=>this.pickedConfig?this.load(this.pickedConfig):this.loadBlueprints()}>${this.text('retry')}</button>`:nothing}</div>`:nothing}
       ${this.loading?html`<p role="status">${this.text('loading')}</p>`:nothing}
       ${this.controller.config_ids.length>1?html`<label>${this.text('configuration')}<select .value=${this.pickedConfig} ?disabled=${this.dirty||this.busy} @change=${(e:Event)=>{this.pickedConfig=(e.target as HTMLSelectElement).value;if(this.pickedConfig)this.load(this.pickedConfig);}}><option value="">${this.text('choose_configuration')}</option>${this.controller.config_ids.map(id=>html`<option value=${id}>${id}</option>`)}</select></label>`:nothing}
       ${this.readonly?html`<p class="notice">${this.text('external_notice')}</p><button ?disabled=${this.busy||this.loading} @click=${this.prepare}>${this.text('prepare')}</button>`:nothing}
-      ${!this.draft&&!this.loading&&!this.readonly&&(!this.controller.config_ids.length||this.preparing)?html`<form class="stack" @submit=${(e:Event)=>{e.preventDefault();this.createDraft();}}><p>${this.text('no_config')}</p><label>${this.text('name')}<input required maxlength="255" .value=${this.newName} @input=${(e:Event)=>{this.newName=(e.target as HTMLInputElement).value;this.markDirty();}}></label><label>${this.text('blueprint')}<select required .value=${this.newBlueprint} @change=${(e:Event)=>{this.newBlueprint=(e.target as HTMLSelectElement).value;this.markDirty();}}><option value="">${this.text('choose')}</option>${Object.values(this.blueprints).sort((a,b)=>a.name.localeCompare(b.name,this.hass.language)).map(value=>html`<option value=${value.id}>${value.service} · ${value.name}</option>`)}</select></label><label>${this.text('identifier')}<input required maxlength="1024" .value=${this.newIdentifier} @input=${(e:Event)=>{this.newIdentifier=(e.target as HTMLInputElement).value;this.markDirty();}}></label><button type="submit">${this.text('create_draft')}</button></form>`:nothing}
+      ${this.showsSetupForm?this.setupForm():nothing}
       ${this.draft?html`
         ${!blueprint?html`<p class="notice">${this.text('no_blueprint')}</p>`:html`
-          <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;return html`<button data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;this.selectorPending=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${item.title}</button>`;}))}</div>
-          ${action?html`<div class="gesture-editor stack"><h3>${blueprint.buttons[this.indices[0]].actions[this.indices[1]].title}</h3>
+          <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;return html`<button data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;this.selectorPending=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${gestureTitle(this.hass.language,item.title)}</button>`;}))}</div>
+          ${action?html`<div class="gesture-editor stack"><h3>${gestureTitle(this.hass.language,blueprint.buttons[this.indices[0]].actions[this.indices[1]].title)}</h3>
             ${quick&&!this.showAdvanced?this.quickForm(quick):selector&&!this.showAdvanced?nothing:html`<p>${this.text(action.sequence.length?'advanced':'no_action')}</p>${action.sequence.length?html`<p class="muted">${this.text('advanced_notice')}</p>`:nothing}`}
             ${this.selectorGesture()}
             <div class="actions">${!this.readonly?html`<button @click=${this.useQuick} ?disabled=${this.busy}>${this.text('configure_quick')}</button>`:nothing}<button @click=${()=>this.showAdvanced=!this.showAdvanced} ?disabled=${this.busy}>${this.text('other_actions')}</button></div>
             ${this.showAdvanced?html`<ha-automation-action .hass=${this.hass} .actions=${action.sequence} .disabled=${this.busy||this.readonly} .narrow=${this.narrow} @value-changed=${this.advancedChanged}></ha-automation-action>`:nothing}
-            <label>${this.text('mode')}<select aria-label=${this.text('mode')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.mode=(e.target as HTMLSelectElement).value;if(quick)this.quick.set(this.selected,{...quick,mode:action.mode as ScriptMode});const selectorPatch=this.selectors.get(this.selected);if(selectorPatch)this.selectors.set(this.selected,{...selectorPatch,mode:action.mode as ScriptMode});this.changed();}}>${['single','restart','queued','parallel'].map(mode=>html`<option .selected=${mode===action.mode}>${mode}</option>`)}</select></label>
+            <label>${this.text('mode')}<select aria-label=${this.text('mode')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.mode=(e.target as HTMLSelectElement).value;if(quick)this.quick.set(this.selected,{...quick,mode:action.mode as ScriptMode});const selectorPatch=this.selectors.get(this.selected);if(selectorPatch)this.selectors.set(this.selected,{...selectorPatch,mode:action.mode as ScriptMode});this.changed();}}>${(['single','restart','queued','parallel'] as const).map(mode=>html`<option value=${mode} .selected=${mode===action.mode}>${this.text(`mode_${mode}`)}</option>`)}</select></label>
             ${blueprint.buttons[this.indices[0]].actions[this.indices[1]].release_index!=null?html`<label class="check"><input type="checkbox" .checked=${!!action.loop} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.loop=(e.target as HTMLInputElement).checked;if(quick)this.quick.set(this.selected,{...quick,loop:action.loop});this.changed();}}>${this.text('loop')}</label>${action.loop?html`<label>${this.text('loop_interval')}<input type="number" min="50" max="5000" step="1" .value=${String(action.loop_interval??250)} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{action.loop_interval=(e.target as HTMLInputElement).valueAsNumber;if(quick)this.quick.set(this.selected,{...quick,loop_interval:action.loop_interval});this.changed();}}></label>`:nothing}`:nothing}
           </div>`:nothing}`}
         ${this.selectorSection()}
@@ -218,6 +277,6 @@ export class FarhomeDeviceEditor extends LitElement{
     </section>`;
   }
   static styles=[controls,css`
-    section{padding:28px}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
+    section{padding:28px}.blueprint-choice{margin-top:8px;justify-content:space-between}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
   `];
 }
