@@ -55,13 +55,15 @@ export class FarhomeDeviceEditor extends LitElement{
       if(assigned)return html`<p class="muted">${this.text('blueprint_assigned')} · ${assigned.name}</p>`;
       return this.controller.config_ids.length?nothing:html`<p class="muted">${this.text('blueprint_no_suggestion')}</p>`;
     }
+    const conditional=suggestion.reason==='mode_unknown';
     const reason=suggestion.reason==='mode'
       ? `${this.text('blueprint_mode_match')} «${suggestion.mode}».`
-      : this.text(suggestion.reason==='gestures'?'blueprint_gesture_match':'blueprint_model_match');
+      : this.text(conditional?'blueprint_mode_unknown':suggestion.reason==='gestures'?'blueprint_gesture_match':'blueprint_model_match');
+    const choices=suggestion.alternative?[suggestion,suggestion.alternative]:[suggestion];
     return html`<div class="notice">
       <h3>${this.text('blueprint_suggested')}</h3>
-      <p><strong>${suggestion.name}</strong></p>
       <p class="muted">${reason}</p>
+      ${choices.map(choice=>html`<p>${conditional?`${this.text(choice.mode==='event'?'blueprint_if_event':'blueprint_if_command')} · `:nothing}<strong>${choice.name}</strong></p>`)}
       ${assigned?html`<p>${this.text('blueprint_assigned')} · ${assigned.name}</p>`:nothing}
     </div>`;
   }

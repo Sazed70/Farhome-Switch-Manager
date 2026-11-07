@@ -31,12 +31,17 @@ try:
         expect(page.locator('[data-device="none"]')).to_be_visible()
         page.evaluate("""() => {
             const device = fixture.controllers.find(d => d.device_id === 'none');
-            device.blueprint_suggestion = {id:'synthetic',name:'Synthetic knob',reason:'mode',mode:'event'};
+            device.blueprint_suggestion = {
+                id:'synthetic',name:'Synthetic knob',reason:'mode_unknown',mode:'event',
+                alternative:{id:'synthetic-command',name:'Synthetic command knob',mode:'command'}
+            };
             return panel.refresh();
         }""")
         page.locator('[data-device="none"]').click()
         expect(page.get_by_role('heading', name='Blueprint suggerito')).to_be_visible()
         expect(page.get_by_text('Synthetic knob', exact=True)).to_be_visible()
+        expect(page.get_by_text('Synthetic command knob', exact=True)).to_be_visible()
+        expect(page.get_by_text('La modalità Zigbee2MQTT non è ancora disponibile.')).to_be_visible()
         expect(page.get_by_label('Modello / blueprint')).to_have_value('')
         assert not page.evaluate("calls.some(x=>x.type.endsWith('/config/save'))")
         page.get_by_role('button', name='Studio', exact=True).click()
