@@ -103,6 +103,17 @@ try:
         assert 'Aumenta' not in page.get_by_label('Funzione', exact=True).inner_text()
         assert page.get_by_text('Passo luminosità (%)', exact=True).count() == 0
         page.get_by_label('Destinatario', exact=True).select_option('fan.variable')
+        page.get_by_label('Funzione', exact=True).select_option('on')
+        speed = page.locator('farhome-device-editor input[type="number"]:visible')
+        speed.fill('50')
+        target = page.get_by_label('Destinatario', exact=True)
+        target.select_option('area:studio')
+        expect(speed).to_have_count(0)
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        area_action = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).quick_actions[0].value")
+        assert area_action['area_id'] == 'studio' and 'percentage' not in area_action
+        target.select_option('fan.variable')
         page.get_by_label('Funzione', exact=True).select_option('increase')
         page.get_by_label('Passo velocità (%)').fill('15')
         page.evaluate('window.failSave=true')
@@ -179,6 +190,8 @@ try:
         page.locator('[data-gesture="0:0"]').click()
         page.get_by_role('button', name='Usa selettore per questo gesto', exact=True).click()
         page.get_by_role('button', name='Conferma gesto selettore', exact=True).click()
+        expect(page.get_by_label('Modalità', exact=True)).to_have_value('queued')
+        expect(page.get_by_label('Modalità', exact=True)).to_be_disabled()
         page.get_by_role('button', name='Sposta su Scrivania', exact=True).click()
         count = page.evaluate("calls.filter(x=>x.type.endsWith('/selector/update')).length")
         page.get_by_role('button', name='Salva gesti', exact=True).click()
@@ -314,6 +327,7 @@ try:
         saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1)")
         assert saved['metadata']['selector_helper'] == 'input_select.draft_lights'
         assert saved['selector_actions'][0]['kind'] == 'next'
+        assert saved['selector_actions'][0]['mode'] == 'queued'
         assert saved['config']['enabled'] is False
         page.get_by_role('button', name='Attiva configurazione', exact=True).click()
         expect(page.get_by_role('button', name='Disattiva configurazione', exact=True)).to_be_visible()

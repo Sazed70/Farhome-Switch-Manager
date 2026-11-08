@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 import asyncio
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.components.input_select import InputSelectStorageCollection, InputSelectStore, STORAGE_FIELDS
 from homeassistant.helpers.collection import IDManager, DictStorageCollectionWebsocket
 from homeassistant.helpers import category_registry as cr, device_registry as dr, entity_registry as er
@@ -14,6 +14,7 @@ from homeassistant.helpers import config_validation as cv
 from custom_components.switch_manager.const import DOMAIN, CONF_MANAGED_SWITCHES
 from custom_components.switch_manager.farhome.store import FarhomeStore
 from custom_components.switch_manager.farhome.selector import async_read_selector, async_update_selector, build_selector_action
+from custom_components.switch_manager.models import ManagedSwitchConfigButtonAction
 from tests.fixtures import MemoryStorage
 
 
@@ -196,10 +197,41 @@ class SelectorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_generated_next_action_cycles_and_toggles_feedback(self):
         next_action = build_selector_action('input_select.renamed', 'next')
+        self.assertEqual(next_action['mode'], 'queued')
         self.assertEqual(len(next_action['sequence']), 6)
         self.assertEqual(next_action['sequence'][0]['action'], 'input_select.select_next')
         self.assertEqual(next_action['sequence'][3]['action'], 'light.toggle')
         self.assertEqual(next_action['sequence'][4]['delay'], {'milliseconds': 500})
         self.assertEqual(next_action['sequence'][5]['action'], 'light.toggle')
         self.assertIn("states('input_select.renamed')", next_action['sequence'][1]['variables']['farhome_selected_light'])
+
+    async def test_saved_feedback_completes_both_toggles_on_rapid_clicks(self):
+        helper = 'input_select.renamed'
+        first_toggle = asyncio.Event()
+        calls = []
+
+        async def select_next(call):
+            current = self.hass.states.get(helper)
+            selected = 'light.b' if current.state == 'light.a' else 'light.a'
+            self.hass.states.async_set(helper, selected, dict(current.attributes))
+
+        async def toggle(call):
+            entity_id, = call.data['entity_id']
+            current = self.hass.states.get(entity_id)
+            self.hass.states.async_set(entity_id, 'off' if current.state == 'on' else 'on')
+            calls.append(entity_id)
+            first_toggle.set()
+
+        self.hass.services.async_register('input_select', 'select_next', select_next)
+        self.hass.services.async_register('light', 'toggle', toggle)
+        config = {**build_selector_action(helper, 'next'), 'mode': 'restart'}
+        action = ManagedSwitchConfigButtonAction(self.hass, '1', 0, 0, None, config)
+        await self.hass.async_block_till_done()
+        async with asyncio.timeout(5):
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(action.run({}, Context()))
+                await first_toggle.wait()
+                tasks.create_task(action.run({}, Context()))
+        self.assertEqual(calls, ['light.b', 'light.b', 'light.a', 'light.a'])
+        self.assertEqual([self.hass.states.get(entity).state for entity in ('light.a', 'light.b')], ['on', 'on'])
 

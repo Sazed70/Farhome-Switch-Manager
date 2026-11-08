@@ -36,7 +36,7 @@ export function buildQuickAction(value: QuickAction): SwitchConfigButtonAction {
   if(value.domain==='light')allowed.push('transition');
   if(value.kind==='increase'||value.kind==='decrease')allowed.push('step');
   if(value.domain==='light'&&['on','toggle'].includes(value.kind))allowed.push('brightness_pct','color_temp_kelvin');
-  if(value.domain==='fan'&&value.kind==='on')allowed.push('percentage');
+  if(value.domain==='fan'&&value.kind==='on'&&!isArea)allowed.push('percentage');
   if(!only(value,allowed))throw new Error('invalid_quick_parameters');
   if(value.loop!==undefined&&typeof value.loop!=='boolean')throw new Error('invalid_loop');
   if(value.loop_interval!==undefined&&(!number(value.loop_interval,50,5000)||!Number.isInteger(value.loop_interval)))throw new Error('invalid_loop_interval');
@@ -111,7 +111,7 @@ export function parseQuickAction(action: SwitchConfigButtonAction): QuickAction|
   }
   if(domain==='light')accepted.push('transition');
   if(domain==='light'&&['on','toggle'].includes(kind))accepted.push('brightness_pct','color_temp_kelvin');
-  if(domain==='fan'&&kind==='on')accepted.push('percentage');
+  if(domain==='fan'&&kind==='on'&&!hasArea)accepted.push('percentage');
   if(!only(data,accepted))return null;
   for(const parameter of ['transition','brightness_pct','color_temp_kelvin','percentage'] as const)if(has(data,parameter))value[parameter]=data[parameter];
   try {buildQuickAction(value);return value;} catch {return null;}
@@ -136,7 +136,7 @@ export function buildSelectorAction(helper_id:string,kind:SelectorKind,step=10,t
     {condition:'template',value_template:`{{ farhome_selected_light is string and farhome_selected_light is match('^light[.][a-z0-9_]+$') and farhome_selected_light in (state_attr('${helper_id}', 'options') or []) and has_value(farhome_selected_light) }}`},
     {action:'light.turn_on',target:{entity_id:'{{ farhome_selected_light }}'},data:{brightness_step_pct:kind==='brightness_up'?step:-step,transition}},
   ];
-  return {mode,sequence};
+  return {mode:kind==='next'?'queued':mode,sequence};
 }
 
 export function parseSelectorAction(action:SwitchConfigButtonAction):SelectorAction|null {
@@ -156,7 +156,8 @@ export function parseSelectorAction(action:SwitchConfigButtonAction):SelectorAct
       // Key ordering is irrelevant, unknown keys are not. Conservative comparison.
       const canonical=(v:any):string=>JSON.stringify(v,(_key,item)=>record(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
       const canonAct=canonical(action.sequence);
-      if(canonical(generated.sequence)===canonAct || (kind==='next'&&canonical([{action:'input_select.select_next',target:{entity_id:helper_id},data:{cycle:true}}])===canonAct))return {helper_id,kind,step,transition,mode:action.mode as ScriptMode};
+      if(canonical(generated.sequence)===canonAct)return {helper_id,kind,step,transition,mode:generated.mode as ScriptMode};
+      if(kind==='next'&&canonical([{action:'input_select.select_next',target:{entity_id:helper_id},data:{cycle:true}}])===canonAct)return {helper_id,kind,step,transition,mode:action.mode as ScriptMode};
     }catch{}
   }
   return null;

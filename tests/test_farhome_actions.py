@@ -72,3 +72,5 @@ class QuickActionValidationTests(unittest.IsolatedAsyncioTestCase):
                 validate_quick_action(self.hass, {'domain': 'light', 'kind': 'increase', 'area_id': 'camera_ilario', 'mode': 'single', 'step': 10})
             with self.assertRaisesRegex(ValueError, 'invalid_quick_action'):
                 validate_quick_action(self.hass, {'domain': 'light', 'kind': 'toggle', 'area_id': 'camera_ilario', 'entity_id': 'light.desk', 'mode': 'single'})
+            with self.assertRaisesRegex(ValueError, 'invalid_quick_parameters'):
+                validate_quick_action(self.hass, {'domain': 'fan', 'kind': 'on', 'area_id': 'camera_ilario', 'percentage': 50})

@@ -70,6 +70,8 @@ test('area targets build and parse native area actions for light, fan and switch
   assert.equal(parsed.kind,'toggle');
   assert.equal(parsed.area_id,'camera_ilario');
   assert.deepEqual(buildQuickAction(parsed), areaAction);
+  assert.throws(()=>buildQuickAction({domain:'fan',kind:'on',mode:'single',area_id:'camera_ilario',percentage:50}),/invalid_quick_parameters/);
+  assert.equal(parseQuickAction({mode:'single',sequence:[{action:'fan.turn_on',target:{area_id:'camera_ilario'},data:{percentage:50}}]}),null);
 });
 test('selector captures current light at the event and provides visual toggle feedback',async()=>{
   const {buildSelectorAction,parseSelectorAction}=await import('../.test-build/farhome/actions.js');
@@ -84,12 +86,14 @@ test('selector captures current light at the event and provides visual toggle fe
   assert.deepEqual(feedback,original);
   assert.throws(()=>buildSelectorAction('input_select.bad\'id','next',10,.1));
   const nextAct=buildSelectorAction('input_select.renamed','next');
+  assert.equal(nextAct.mode,'queued');
   assert.equal(nextAct.sequence.length,6);
   assert.equal(nextAct.sequence[0].action,'input_select.select_next');
   assert.equal(nextAct.sequence[3].action,'light.toggle');
   assert.deepEqual(nextAct.sequence[4].delay,{milliseconds:500});
   assert.equal(nextAct.sequence[5].action,'light.toggle');
-  assert.deepEqual(parseSelectorAction(nextAct),{helper_id:'input_select.renamed',kind:'next',step:10,transition:.1,mode:'restart'});
+  assert.deepEqual(parseSelectorAction(nextAct),{helper_id:'input_select.renamed',kind:'next',step:10,transition:.1,mode:'queued'});
+  assert.equal(parseSelectorAction({...nextAct,mode:'restart'}).mode,'queued');
   const legacyNext={mode:'restart',sequence:[{action:'input_select.select_next',target:{entity_id:'input_select.renamed'},data:{cycle:true}}]};
   assert.deepEqual(parseSelectorAction(legacyNext),{helper_id:'input_select.renamed',kind:'next',step:10,transition:.1,mode:'restart'});
 });

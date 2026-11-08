@@ -132,7 +132,7 @@ export class FarhomeDeviceEditor extends LitElement{
   private changeTarget(value:QuickAction,target:string){
     if(target.startsWith('area:')){
       const area_id=target.slice(5);
-      const {step,entity_id,...shared}=value;
+      const {step,entity_id,percentage,...shared}=value;
       const next:QuickAction={...shared,area_id};
       if(!['toggle','on','off'].includes(next.kind))next.kind='toggle';
       this.setQuick(next);
@@ -140,6 +140,11 @@ export class FarhomeDeviceEditor extends LitElement{
     }
     const {area_id,...shared}=value;
     const next:QuickAction={...shared,entity_id:target};
+    if(area_id){
+      delete next.brightness_pct;
+      delete next.color_temp_kelvin;
+      delete next.transition;
+    }
     const entity=this.hass.states[target];
     const options=supportedQuickActions(entity,this.hass.services);
     if(!options.some(x=>x.kind===next.kind))next.kind=options[0]?.kind||'toggle';
@@ -374,8 +379,9 @@ export class FarhomeDeviceEditor extends LitElement{
       const selected=parseSelectorAction(action);
       if(!selected||selected.helper_id!==previous)return;
       const {kind,step,transition,mode}=selected;
-      button.actions[a]={...action,...buildSelectorAction(helper,kind,step,transition,mode)};
-      this.selectors.set(`${b}:${a}`,{button:b,action:a,kind,step,transition,mode});
+      const generated=buildSelectorAction(helper,kind,step,transition,mode);
+      button.actions[a]={...action,...generated};
+      this.selectors.set(`${b}:${a}`,{button:b,action:a,kind,step,transition,mode:generated.mode as ScriptMode});
     }));
     this.binding={...this.binding!,selector_helper:helper};
     this.helperChoice='';
@@ -404,7 +410,7 @@ export class FarhomeDeviceEditor extends LitElement{
       ${!this.creatingSelector&&helper&&helper===savedHelper&&this.envelope?html`<farhome-selector-editor .hass=${this.hass} .entityId=${helper} .configId=${this.envelope.config_id} .allowed=${this.canEditHelper&&!this.busy} @helper-dirty-changed=${this.helperDraftChanged}></farhome-selector-editor>`:nothing}
     </div></details>`;
   }
-  private applySelector(){const helper=this.binding?.selector_helper;if(this.busy||this.readonly||!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,value);this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error='invalid_form';}}
+  private applySelector(){const helper=this.binding?.selector_helper;if(this.busy||this.readonly||!helper||!this.action)return;try{const [button,action]=this.indices;const value={button,action,kind:this.selectorKind,step:this.selectorStep,transition:this.selectorTransition,mode:this.action.mode as ScriptMode};const generated=buildSelectorAction(helper,value.kind,value.step,value.transition,value.mode);this.draft!.buttons[button].actions[action]=generated;this.quick.delete(this.selected);this.selectors.set(this.selected,{...value,mode:generated.mode as ScriptMode});this.selectorPending=false;this.showAdvanced=false;this.changed();}catch{this.error='invalid_form';}}
   protected selectorGesture(){
     const helper=this.binding?.selector_helper;
     if(!helper||this.readonly||!this.action)return nothing;
@@ -416,6 +422,7 @@ export class FarhomeDeviceEditor extends LitElement{
   render(){
     if(!this.controller)return nothing;
     const blueprint=this.blueprint;const action=this.action;const quick=this.currentQuick;const selector=action&&parseSelectorAction(action);
+    const queuedFeedback=selector?.kind==='next'&&action!.sequence.length>1;
     return html`<section class="stack" aria-label=${this.controller.name}>
       <header class="device-heading"><farhome-thumbnail large .asset=${this.controller.image}></farhome-thumbnail><div><h2>${this.controller.name}</h2><p class="muted">${this.controller.manufacturer} ${this.controller.model}</p><p class="status">${this.text(this.controller.management==='farhome'?'managed':this.controller.management==='external'?'external':'unknown')} · ${this.text(this.controller.compatibility==='verified'?'verified':'unverified')}</p></div></header>
       ${this.blueprintHint()}
@@ -432,7 +439,7 @@ export class FarhomeDeviceEditor extends LitElement{
             ${this.selectorGesture()}
             <div class="actions">${!this.readonly?html`<button @click=${this.useQuick} ?disabled=${this.busy}>${this.text('configure_quick')}</button>`:nothing}<button @click=${()=>this.showAdvanced=!this.showAdvanced} ?disabled=${this.busy}>${this.text('other_actions')}</button></div>
             ${this.showAdvanced?html`<ha-automation-action .hass=${this.hass} .actions=${action.sequence} .disabled=${this.busy||this.readonly} .narrow=${this.narrow} @value-changed=${this.advancedChanged}></ha-automation-action>`:nothing}
-            <label>${this.text('mode')}<select aria-label=${this.text('mode')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.mode=(e.target as HTMLSelectElement).value;if(quick)this.quick.set(this.selected,{...quick,mode:action.mode as ScriptMode});const selectorPatch=this.selectors.get(this.selected);if(selectorPatch)this.selectors.set(this.selected,{...selectorPatch,mode:action.mode as ScriptMode});this.changed();}}>${(['single','restart','queued','parallel'] as const).map(mode=>html`<option value=${mode} .selected=${mode===action.mode}>${this.text(`mode_${mode}`)}</option>`)}</select></label>
+            <label>${this.text('mode')}<select aria-label=${this.text('mode')} ?disabled=${this.busy||this.readonly||queuedFeedback} @change=${(e:Event)=>{action.mode=(e.target as HTMLSelectElement).value;if(quick)this.quick.set(this.selected,{...quick,mode:action.mode as ScriptMode});const selectorPatch=this.selectors.get(this.selected);if(selectorPatch)this.selectors.set(this.selected,{...selectorPatch,mode:action.mode as ScriptMode});this.changed();}}>${(['single','restart','queued','parallel'] as const).map(mode=>html`<option value=${mode} .selected=${mode===(queuedFeedback?'queued':action.mode)}>${this.text(`mode_${mode}`)}</option>`)}</select></label>
             ${blueprint.buttons[this.indices[0]].actions[this.indices[1]].release_index!=null?html`<label class="check"><input type="checkbox" .checked=${!!action.loop} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.loop=(e.target as HTMLInputElement).checked;if(quick)this.quick.set(this.selected,{...quick,loop:action.loop});this.changed();}}>${this.text('loop')}</label>${action.loop?html`<label>${this.text('loop_interval')}<input type="number" min="50" max="5000" step="1" .value=${String(action.loop_interval??250)} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{action.loop_interval=(e.target as HTMLInputElement).valueAsNumber;if(quick)this.quick.set(this.selected,{...quick,loop_interval:action.loop_interval});this.changed();}}></label>`:nothing}`:nothing}
           </div>`:nothing}`}
         ${this.selectorSection()}

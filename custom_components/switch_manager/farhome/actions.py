@@ -40,7 +40,7 @@ def validate_quick_action(hass, value):
         allowed.add('step')
     if domain == 'light' and kind in ('on', 'toggle'):
         allowed.update(('brightness_pct', 'color_temp_kelvin'))
-    if domain == 'fan' and kind == 'on':
+    if domain == 'fan' and kind == 'on' and area_id is None:
         allowed.add('percentage')
     if set(value) - allowed:
         raise ValueError('invalid_quick_parameters')
