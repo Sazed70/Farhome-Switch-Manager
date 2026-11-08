@@ -4,7 +4,7 @@ Fork pubblico di [macpit/Home-Assistant-Switch-Manager](https://github.com/macpi
 
 ## Stato
 
-Il pannello sul ramo `work/farhome-panel` include inventario, stanze, miniature, ricerca blueprint, gesti multidominio e selettore persistente. L’interfaccia segue la lingua del profilo Home Assistant per italiano e inglese. Il ramo di sviluppo è stato provato su un singolo controller. La base upstream è `73c7af5e2e23132f6c2e0489d99016babf8741d3`. [Prove e limiti](testing-and-migration.md).
+Il pannello sul ramo `work/farhome-panel` include inventario, stanze, miniature, ricerca blueprint, gesti multidominio, regolazione delle luci con anteprima a schermo e selettore persistente. L’interfaccia segue la lingua del profilo Home Assistant per italiano e inglese. Il ramo di sviluppo è stato provato su un singolo controller. La base upstream è `73c7af5e2e23132f6c2e0489d99016babf8741d3`. [Prove e limiti](testing-and-migration.md).
 
 ## Organizzazione
 

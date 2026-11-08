@@ -51,6 +51,19 @@ class QuickActionValidationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             validate_quick_action(self.hass,{'domain':'light','kind':'on','entity_id':'light.desk','color_temp_kelvin':9000,'mode':'single'})
 
+    def test_rgb_is_saved_only_for_color_capable_lights_and_without_kelvin(self):
+        self.hass.states.async_set('light.color', 'on', {'supported_color_modes': ['xy', 'color_temp']})
+        quick = {'domain': 'light', 'kind': 'toggle', 'mode': 'single', 'entity_id': 'light.color', 'rgb_color': [51, 170, 102], 'brightness_pct': 62.5}
+        self.assertEqual(validate_quick_action(self.hass, quick)['sequence'][0]['data'],
+                         {'rgb_color': [51, 170, 102], 'brightness_pct': 62.5})
+        with self.assertRaisesRegex(ValueError, 'invalid_quick_parameters'):
+            validate_quick_action(self.hass, {**quick, 'color_temp_kelvin': 3400})
+        with self.assertRaisesRegex(ValueError, 'unsupported_color'):
+            validate_quick_action(self.hass, {**quick, 'entity_id': 'light.desk'})
+        for rgb in ([0, 0], [0, True, 0], [0, 0, 256], [0, 1.5, 0], '{{ colors }}'):
+            with self.subTest(rgb=rgb), self.assertRaisesRegex(ValueError, 'invalid_parameter'):
+                validate_quick_action(self.hass, {**quick, 'rgb_color': rgb})
+
     def test_invalid_numbers_and_unsupported_service_rejected(self):
         for step in (True,0,-10,101,float('inf')):
             with self.subTest(step=step),self.assertRaises(ValueError):

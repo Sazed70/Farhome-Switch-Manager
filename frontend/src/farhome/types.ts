@@ -3,10 +3,11 @@ import type {HomeAssistant, SwitchConfig, Blueprint, SwitchConfigButtonAction} f
 export type Domain = 'light'|'fan'|'switch'|'scene'|'script';
 export type QuickKind = 'toggle'|'on'|'off'|'increase'|'decrease'|'activate'|'run';
 export type ScriptMode = 'single'|'restart'|'queued'|'parallel';
+export type RgbColor = [number, number, number];
 export interface QuickAction {
   domain: Domain; kind: QuickKind; entity_id?: string; area_id?: string; mode: ScriptMode;
   step?: number; transition?: number; brightness_pct?: number;
-  color_temp_kelvin?: number; percentage?: number;
+  color_temp_kelvin?: number; rgb_color?: RgbColor; percentage?: number;
   loop?: boolean; loop_interval?: number; alias?: string;
   service_key?: 'action'|'service'; data_present?: boolean;
 }

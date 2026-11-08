@@ -1,5 +1,5 @@
 import type {QuickAction, Domain, QuickKind, ScriptMode, ActionOption, EntityState, ServiceMap, SwitchConfigButtonAction} from './types.js';
-import type {SelectorAction,SelectorKind} from './types.js';
+import type {RgbColor,SelectorAction,SelectorKind} from './types.js';
 
 const modes = ['single','restart','queued','parallel'];
 const domains = ['light','fan','switch','scene','script'];
@@ -9,6 +9,11 @@ const record = (value: unknown): value is Record<string, any> => !!value && type
 const has = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value,key);
 const number = (value: unknown, min: number, max=Infinity) => typeof value === 'number' && Number.isFinite(value) && value>=min && value<=max;
 const only = (value: object, keys: readonly string[]) => Object.keys(value).every(key=>keys.includes(key));
+const colorModes = ['hs','xy','rgb','rgbw','rgbww'];
+
+export function isRgbColor(value: unknown): value is RgbColor {
+  return Array.isArray(value)&&value.length===3&&Array.from(value).every(channel=>Number.isInteger(channel)&&channel>=0&&channel<=255);
+}
 
 export function serviceFor(domain: Domain, kind: QuickKind): string|null {
   if (domain==='scene') return kind==='activate'?'scene.turn_on':null;
@@ -35,15 +40,18 @@ export function buildQuickAction(value: QuickAction): SwitchConfigButtonAction {
   const allowed=['domain','kind','entity_id','area_id','mode','loop','loop_interval','alias','service_key','data_present'];
   if(value.domain==='light')allowed.push('transition');
   if(value.kind==='increase'||value.kind==='decrease')allowed.push('step');
-  if(value.domain==='light'&&['on','toggle'].includes(value.kind))allowed.push('brightness_pct','color_temp_kelvin');
+  if(value.domain==='light'&&['on','toggle'].includes(value.kind)){
+    allowed.push('brightness_pct','color_temp_kelvin');
+    if(!isArea)allowed.push('rgb_color');
+  }
   if(value.domain==='fan'&&value.kind==='on'&&!isArea)allowed.push('percentage');
-  if(!only(value,allowed))throw new Error('invalid_quick_parameters');
+  if(!only(value,allowed)||(has(value,'rgb_color')&&has(value,'color_temp_kelvin')))throw new Error('invalid_quick_parameters');
   if(value.loop!==undefined&&typeof value.loop!=='boolean')throw new Error('invalid_loop');
   if(value.loop_interval!==undefined&&(!number(value.loop_interval,50,5000)||!Number.isInteger(value.loop_interval)))throw new Error('invalid_loop_interval');
   if(value.alias!==undefined&&typeof value.alias!=='string')throw new Error('invalid_alias');
   if(value.service_key!==undefined&&!['action','service'].includes(value.service_key))throw new Error('invalid_service_key');
   if(value.data_present!==undefined&&typeof value.data_present!=='boolean')throw new Error('invalid_data_flag');
-  const data: Record<string,number>={};
+  const data: Record<string,number|RgbColor>={};
   if(value.kind==='increase'||value.kind==='decrease'){
     if(value.domain==='light'&&value.step===undefined)throw new Error('missing_step');
     if(value.step!==undefined){
@@ -56,6 +64,10 @@ export function buildQuickAction(value: QuickAction): SwitchConfigButtonAction {
     if(item===undefined)continue;
     if(!number(item,key==='color_temp_kelvin'?Number.MIN_VALUE:0,['brightness_pct','percentage'].includes(key)?100:Infinity))throw new Error('invalid_parameter');
     data[key]=item;
+  }
+  if(has(value,'rgb_color')){
+    if(!isRgbColor(value.rgb_color))throw new Error('invalid_parameter');
+    data.rgb_color=[...value.rgb_color];
   }
   const target: Record<string,string> = isArea ? {area_id: value.area_id!} : {entity_id: value.entity_id!};
   const step:Record<string,unknown>={[value.service_key||'action']:service,target};
@@ -110,16 +122,39 @@ export function parseQuickAction(action: SwitchConfigButtonAction): QuickAction|
     }
   }
   if(domain==='light')accepted.push('transition');
-  if(domain==='light'&&['on','toggle'].includes(kind))accepted.push('brightness_pct','color_temp_kelvin');
+  if(domain==='light'&&['on','toggle'].includes(kind)){
+    accepted.push('brightness_pct','color_temp_kelvin');
+    if(hasEntity)accepted.push('rgb_color');
+  }
   if(domain==='fan'&&kind==='on'&&!hasArea)accepted.push('percentage');
   if(!only(data,accepted))return null;
   for(const parameter of ['transition','brightness_pct','color_temp_kelvin','percentage'] as const)if(has(data,parameter))value[parameter]=data[parameter];
+  if(has(data,'rgb_color')){
+    const rgb:unknown=data.rgb_color;
+    if(!isRgbColor(rgb))return null;
+    value.rgb_color=[...rgb];
+  }
   try {buildQuickAction(value);return value;} catch {return null;}
 }
 
 export function supportsBrightness(entity: EntityState): boolean {
   const modes=entity.attributes.supported_color_modes;
-  return Array.isArray(modes)&&modes.some(mode=>['brightness','color_temp','hs','xy','rgb','rgbw','rgbww','white'].includes(mode));
+  return Array.isArray(modes)&&modes.some(mode=>['brightness','color_temp','white',...colorModes].includes(mode));
+}
+
+export function supportsColor(entity: EntityState): boolean {
+  const modes=entity.attributes.supported_color_modes;
+  return Array.isArray(modes)&&modes.some(mode=>colorModes.includes(mode));
+}
+
+export function supportsColorTemperature(entity: EntityState): boolean {
+  const modes=entity.attributes.supported_color_modes;
+  return Array.isArray(modes)&&modes.includes('color_temp');
+}
+
+export function lightTemperatureRange(entity: EntityState): [number,number] {
+  const {min_color_temp_kelvin:min,max_color_temp_kelvin:max}=entity.attributes;
+  return number(min,1)&&number(max,min)?[min,max]:[2000,6535];
 }
 
 export function buildSelectorAction(helper_id:string,kind:SelectorKind,step=10,transition=.1,mode:ScriptMode='restart'):SwitchConfigButtonAction {

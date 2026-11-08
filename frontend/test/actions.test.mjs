@@ -63,6 +63,18 @@ test('multiple entity targets and template expressions stay advanced',()=>{
     assert.equal(parseQuickAction({mode:'single',sequence:[{action:'light.turn_on',target}]}),null);
   }
 });
+test('a literal RGB light action round trips without changing its other settings',()=>{
+  const action={mode:'queued',sequence:[{service:'light.toggle',alias:'Cielo',target:{entity_id:'light.desk'},data:{rgb_color:[51,170,102],brightness_pct:62.5}}]};
+  assert.deepEqual(buildQuickAction(parseQuickAction(action)),action);
+  for(const data of [
+    {rgb_color:[-1,0,0]}, {rgb_color:[0,0,256]}, {rgb_color:[0,1.5,0]},
+    {rgb_color:[0,0]}, {rgb_color:[0,'1',2]}, {rgb_color:'{{ colors }}'},
+    {rgb_color:[0,1,2],color_temp_kelvin:3400},
+  ]){
+    assert.equal(parseQuickAction({mode:'single',sequence:[{...action.sequence[0],data}]}),null);
+  }
+  assert.throws(()=>buildQuickAction({domain:'light',kind:'on',mode:'single',area_id:'studio',rgb_color:[0,1,2]}));
+});
 test('area targets build and parse native area actions for light, fan and switch',()=>{
   const areaAction = {mode:'single',sequence:[{action:'light.toggle',target:{area_id:'camera_ilario'}}]};
   const parsed = parseQuickAction(areaAction);
