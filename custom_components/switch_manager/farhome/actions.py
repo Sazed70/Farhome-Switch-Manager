@@ -9,6 +9,7 @@ from homeassistant.components.light.const import LightEntityFeature
 ENTITY_ID = re.compile(r'^(light|fan|switch|scene|script)\.[a-z0-9_]+$')
 AREA_ID = re.compile(r'^[a-z0-9_]+$')
 MODES = {'single', 'restart', 'queued', 'parallel'}
+COLOR_MODES = ('hs', 'xy', 'rgb', 'rgbw', 'rgbww')
 KINDS = {
     'light': {'toggle': 'toggle', 'on': 'turn_on', 'off': 'turn_off', 'increase': 'turn_on', 'decrease': 'turn_on'},
     'fan': {'toggle': 'toggle', 'on': 'turn_on', 'off': 'turn_off', 'increase': 'increase_speed', 'decrease': 'decrease_speed'},
@@ -40,9 +41,11 @@ def validate_quick_action(hass, value):
         allowed.add('step')
     if domain == 'light' and kind in ('on', 'toggle'):
         allowed.update(('brightness_pct', 'color_temp_kelvin'))
+        if area_id is None:
+            allowed.add('rgb_color')
     if domain == 'fan' and kind == 'on' and area_id is None:
         allowed.add('percentage')
-    if set(value) - allowed:
+    if set(value) - allowed or {'rgb_color', 'color_temp_kelvin'} <= value.keys():
         raise ValueError('invalid_quick_parameters')
     if area_id is not None:
         if not isinstance(area_id, str) or not AREA_ID.fullmatch(area_id):
@@ -62,7 +65,8 @@ def validate_quick_action(hass, value):
         features = entity.attributes.get('supported_features', 0)
         features = features if type(features) is int else 0
         color_modes = entity.attributes.get('supported_color_modes', [])
-        brightness = isinstance(color_modes, (list, tuple, set)) and any(mode in color_modes for mode in ('brightness', 'color_temp', 'hs', 'xy', 'rgb', 'rgbw', 'rgbww', 'white'))
+        color_modes = color_modes if isinstance(color_modes, (list, tuple, set)) else ()
+        brightness = any(mode in color_modes for mode in ('brightness', 'color_temp', 'white', *COLOR_MODES))
         if domain == 'fan':
             if (kind in ('increase', 'decrease') or 'percentage' in value) and not features & FanEntityFeature.SET_SPEED:
                 raise ValueError('unsupported_speed')
@@ -79,6 +83,8 @@ def validate_quick_action(hass, value):
                 kelvin = value['color_temp_kelvin']
                 if 'color_temp' not in color_modes or not _number(kelvin, 1) or not entity.attributes.get('min_color_temp_kelvin', 0) <= kelvin <= entity.attributes.get('max_color_temp_kelvin', math.inf):
                     raise ValueError('unsupported_color_temperature')
+            if 'rgb_color' in value and not any(mode in color_modes for mode in COLOR_MODES):
+                raise ValueError('unsupported_color')
     mode = value.get('mode', 'single')
     if not isinstance(mode, str) or mode not in MODES:
         raise ValueError('invalid_mode')
@@ -106,6 +112,11 @@ def validate_quick_action(hass, value):
             if not _number(value[key], 1 if key == 'color_temp_kelvin' else 0, 100 if key in ('brightness_pct', 'percentage') else math.inf):
                 raise ValueError('invalid_parameter')
             data[key] = value[key]
+    if 'rgb_color' in value:
+        rgb = value['rgb_color']
+        if not isinstance(rgb, list) or len(rgb) != 3 or not all(type(channel) is int and 0 <= channel <= 255 for channel in rgb):
+            raise ValueError('invalid_parameter')
+        data['rgb_color'] = rgb.copy()
     target = {'area_id': area_id} if area_id is not None else {'entity_id': entity_id}
     action = {value.get('service_key', 'action'): f'{domain}.{service}', 'target': target}
     if data or value.get('data_present'):

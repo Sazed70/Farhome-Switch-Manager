@@ -21,6 +21,12 @@ Nessuna release applicativa.
   stanza con un singolo gesto. Capacità e servizi sono validati anche sul backend.
   La velocità è disponibile per un singolo ventilatore che la supporta e viene
   rimossa passando a una stanza. Un’entità unavailable conserva il suo identificatore.
+- Per una singola luce, **Accendi** e **Accendi / spegni** mostrano lo slider della
+  luminosità, la temperatura del bianco entro i limiti della lampadina e la tavolozza
+  RGB, in base alle capacità del dispositivo. **Usa valore predefinito** omette la
+  luminosità; **Predefinita** omette la tonalità. Bianco e colore sono due modalità
+  dello stesso parametro. L’anteprima si aggiorna sullo schermo mentre regoli i
+  valori. **Salva gesti** registra le impostazioni per il prossimo utilizzo del pulsante.
 - Sequenze non completamente riconosciute restano avanzate e passano all’editor
   HA corrente. La sostituzione rapida è esplicita e riguarda un solo gesto.
   L’editor nuovo non invia azioni a luci, ventilatori o prese durante la configurazione.

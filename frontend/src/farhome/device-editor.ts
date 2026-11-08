@@ -1,6 +1,7 @@
 import {LitElement,html,css,nothing} from 'lit';
 import {customElement,property,state} from 'lit/decorators.js';
 import {live} from 'lit/directives/live.js';
+import {keyed} from 'lit/directives/keyed.js';
 import {repeat} from 'lit/directives/repeat.js';
 import type {Blueprint,Route} from '../types.js';
 import {createEmptyConfig} from '../helpers.js';
@@ -10,9 +11,10 @@ import {t,TextKey,errorKey,gestureTitle} from './i18n.js';
 import {controls} from './styles.js';
 import {dialogKeys} from './dialog.js';
 import {matchingGestures,sharesIdentifier} from './blueprint-change.js';
-import {buildQuickAction,parseQuickAction,supportedQuickActions,supportedAreaQuickActions,supportsBrightness,buildSelectorAction,parseSelectorAction} from './actions.js';
+import {buildQuickAction,parseQuickAction,supportedQuickActions,supportedAreaQuickActions,supportsBrightness,supportsColor,supportsColorTemperature,lightTemperatureRange,buildSelectorAction,parseSelectorAction} from './actions.js';
 import {FarhomeSelectorEditor} from './selector-editor.js';
 import './selector-editor.js';
+import './light-settings.js';
 import './thumbnail.js';
 
 @customElement('farhome-device-editor')
@@ -88,7 +90,16 @@ export class FarhomeDeviceEditor extends LitElement{
   protected get blueprint(){return typeof this.draft?.blueprint==='object'?this.draft.blueprint:undefined;}
   protected get indices(){return this.selected.split(':').map(Number);}
   protected get action(){const [b,a]=this.indices;return this.draft?.buttons[b]?.actions[a];}
-  protected get currentQuick(){return this.quick.get(this.selected)|| (this.action?parseQuickAction(this.action):null);}
+  protected get currentQuick(){
+    const draft=this.quick.get(this.selected);
+    if(draft)return draft;
+    const saved=this.action?parseQuickAction(this.action):null;
+    if(saved?.rgb_color){
+      const entity=saved.entity_id?this.hass.states[saved.entity_id]:undefined;
+      if(!entity||!supportsColor(entity))return null;
+    }
+    return saved;
+  }
 
   protected updated(changed:Map<string,unknown>){
     if(changed.has('controller')){
@@ -120,7 +131,7 @@ export class FarhomeDeviceEditor extends LitElement{
     this.showAdvanced=false;this.changed();
   }
   private useQuick(){
-    if(this.action?.sequence.length&&!parseQuickAction(this.action)){this.replacePending=true;return;}
+    if(this.action?.sequence.length&&!this.currentQuick){this.replacePending=true;return;}
     this.replaceWithQuick();
   }
   private replaceWithQuick(){
@@ -132,7 +143,7 @@ export class FarhomeDeviceEditor extends LitElement{
   private changeTarget(value:QuickAction,target:string){
     if(target.startsWith('area:')){
       const area_id=target.slice(5);
-      const {step,entity_id,percentage,...shared}=value;
+      const {step,entity_id,percentage,rgb_color,...shared}=value;
       const next:QuickAction={...shared,area_id};
       if(!['toggle','on','off'].includes(next.kind))next.kind='toggle';
       this.setQuick(next);
@@ -146,23 +157,35 @@ export class FarhomeDeviceEditor extends LitElement{
       delete next.transition;
     }
     const entity=this.hass.states[target];
+    if(next.domain==='light'&&entity){
+      if(!supportsBrightness(entity))delete next.brightness_pct;
+      if(!supportsColor(entity))delete next.rgb_color;
+      if(next.color_temp_kelvin!==undefined){
+        const [min,max]=lightTemperatureRange(entity);
+        if(!supportsColorTemperature(entity)||next.color_temp_kelvin<min||next.color_temp_kelvin>max)delete next.color_temp_kelvin;
+      }
+    }
     const options=supportedQuickActions(entity,this.hass.services);
-    if(!options.some(x=>x.kind===next.kind))next.kind=options[0]?.kind||'toggle';
+    if(options.length&&!options.some(x=>x.kind===next.kind)){
+      this.changeKind(next,options[0].kind);
+      return;
+    }
     this.setQuick(next);
   }
   private selectDomain(value:QuickAction,domain:Domain){
     const entity=Object.values(this.hass.states).find(item=>item.entity_id.startsWith(domain+'.')&&supportedQuickActions(item,this.hass.services).length);
     const kind=supportedQuickActions(entity,this.hass.services)[0]?.kind??(domain==='scene'?'activate':domain==='script'?'run':'on');
-    const {step,transition,brightness_pct,color_temp_kelvin,percentage,area_id,...shared}=value;
+    const {step,transition,brightness_pct,color_temp_kelvin,rgb_color,percentage,area_id,...shared}=value;
     this.setQuick({...shared,domain,entity_id:entity?.entity_id||'',kind,...(['increase','decrease'].includes(kind)?{step:10}:{})});
   }
   private changeKind(value:QuickAction,kind:QuickAction['kind']){
-    const {step,brightness_pct,color_temp_kelvin,percentage,...shared}=value;
+    const {step,brightness_pct,color_temp_kelvin,rgb_color,percentage,...shared}=value;
     const next:QuickAction={...shared,kind};
     if(kind==='increase'||kind==='decrease')next.step=step??10;
     if(value.domain==='light'&&(kind==='on'||kind==='toggle')){
       if(brightness_pct!==undefined)next.brightness_pct=brightness_pct;
       if(color_temp_kelvin!==undefined)next.color_temp_kelvin=color_temp_kelvin;
+      if(rgb_color!==undefined)next.rgb_color=rgb_color;
     }
     if(value.domain==='fan'&&kind==='on'&&percentage!==undefined)next.percentage=percentage;
     this.setQuick(next);
@@ -176,6 +199,7 @@ export class FarhomeDeviceEditor extends LitElement{
     const selectedTarget=isArea?`area:${value.area_id}`:(value.entity_id||'');
     const areas=this.areas||[];
     const roomPrefix=value.domain==='light'?this.text('all_lights_in'):this.text('all_devices_in');
+    const lightTurnOn=value.domain==='light'&&['on','toggle'].includes(value.kind);
     return html`<div class="fields">
       <label>${this.text('target_type')}<select aria-label=${this.text('target_type')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>this.selectDomain(value,(e.target as HTMLSelectElement).value as Domain)}>${(['light','fan','switch','scene','script'] as Domain[]).map(domain=>html`<option value=${domain} .selected=${domain===value.domain}>${this.text(domain)}</option>`)}</select></label>
       <label>${this.text('target')}<select aria-label=${this.text('target')} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>this.changeTarget(value,(e.target as HTMLSelectElement).value)}>
@@ -192,10 +216,13 @@ export class FarhomeDeviceEditor extends LitElement{
       <label>${this.text('function')}<select aria-label=${this.text('function')} ?disabled=${this.busy||this.readonly||!options.length} @change=${(e:Event)=>this.changeKind(value,(e.target as HTMLSelectElement).value as QuickAction['kind'])}>${!options.some(x=>x.kind===value.kind)?html`<option value=${value.kind} .selected=${true}>${this.text(('action_'+value.kind) as TextKey)} · ${this.text('unavailable')}</option>`:nothing}${options.map(option=>html`<option value=${option.kind} .selected=${option.kind===value.kind}>${this.text(option.label_key as TextKey)}</option>`)}</select></label>
       ${!isArea&&['increase','decrease'].includes(value.kind)?this.numeric(value.domain==='fan'?'step_speed':'step_brightness','step',value,.1,100):nothing}
       ${value.domain==='light'?this.numeric('transition','transition',value,0,3600,true):nothing}
-      ${value.domain==='light'&&['on','toggle'].includes(value.kind)&&(isArea||(entity&&supportsBrightness(entity)))?this.numeric('brightness','brightness_pct',value,0,100,true):nothing}
-      ${value.domain==='light'&&['on','toggle'].includes(value.kind)&&(isArea||entity?.attributes.supported_color_modes?.includes('color_temp'))?this.numeric('kelvin','color_temp_kelvin',value,entity?.attributes.min_color_temp_kelvin||1,entity?.attributes.max_color_temp_kelvin,true):nothing}
+      ${lightTurnOn&&isArea?this.numeric('brightness','brightness_pct',value,0,100,true):nothing}
+      ${lightTurnOn&&isArea?this.numeric('kelvin','color_temp_kelvin',value,1,undefined,true):nothing}
       ${value.domain==='fan'&&value.kind==='on'&&(Number(entity?.attributes.supported_features)&1)?this.numeric('percentage','percentage',value,0,100,true):nothing}
-    </div>${!options.length?html`<p class="notice">${this.text('no_options')}</p>`:nothing}`;
+    </div>${lightTurnOn&&entity&&supportsBrightness(entity)?keyed(`${this.draft?.id}:${this.selected}:${entity.entity_id}`,html`
+      <farhome-light-settings .value=${value} .entity=${entity} .language=${this.hass.language} .disabled=${this.busy||this.readonly}
+        @light-settings-change=${(event:CustomEvent<QuickAction>)=>this.setQuick(event.detail)}></farhome-light-settings>`):nothing}
+    ${!options.length?html`<p class="notice">${this.text('no_options')}</p>`:nothing}`;
   }
   private async prepare(){
     this.preparing=true;this.error=undefined;

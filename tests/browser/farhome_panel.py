@@ -377,6 +377,67 @@ try:
         expect(page.get_by_role('button', name='Elimina configurazione', exact=True)).to_have_count(0)
         assert page.evaluate("!configs['4'] && Boolean(configs['1'])")
         assert not page.evaluate("calls.some(x=>x.type==='call_service')")
+
+        page.goto(f'http://127.0.0.1:{server.server_port}/tests/browser/harness.html')
+        page.wait_for_function('window.ready === true')
+        page.evaluate("""() => {
+            Object.assign(testHass.states['light.desk'].attributes, {
+                supported_color_modes: ['color_temp', 'rgb'],
+                min_color_temp_kelvin: 2200, max_color_temp_kelvin: 6500
+            });
+            configs['1'].buttons[0].actions[0] = {mode:'single',sequence:[
+                {action:'light.toggle',target:{entity_id:'light.desk'},data:{brightness_pct:62.5,color_temp_kelvin:5609}}
+            ]};
+        }""")
+        page.locator('[data-device="knob"]').click()
+        settings = page.locator('farhome-light-settings')
+        brightness = settings.get_by_role('slider', name='Luminosità (%)', exact=True)
+        temperature = settings.get_by_role('slider', name='Temperatura colore (K)', exact=True)
+        expect(brightness).to_have_value('62.5')
+        expect(temperature).to_have_value('5609')
+        expect(temperature).to_have_attribute('min', '2200')
+        expect(temperature).to_have_attribute('max', '6500')
+        temperature.press('End')
+        expect(settings.get_by_text('62,5% · 6500 K', exact=True)).to_be_visible()
+        settings.get_by_role('button', name='Colore', exact=True).click()
+        settings.get_by_role('button', name='Lavanda', exact=True).click()
+        settings.get_by_role('button', name='Bianco', exact=True).click()
+        expect(temperature).to_have_value('6500')
+        settings.get_by_role('button', name='Colore', exact=True).click()
+        expect(settings.get_by_role('button', name='Lavanda', exact=True)).to_have_attribute('aria-pressed', 'true')
+        assert not page.evaluate("calls.some(x=>x.type==='call_service'||x.type.endsWith('/config/save'))")
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1)")
+        assert saved['config']['buttons'][0]['actions'][0]['sequence'][0]['data'] == {'brightness_pct':62.5,'rgb_color':[168,139,255]}
+        page.evaluate("mount('/rooms/studio/device/knob')")
+        expect(settings.get_by_role('button', name='Lavanda', exact=True)).to_have_attribute('aria-pressed', 'true')
+        for width in (390, 320):
+            page.set_viewport_size({'width': width, 'height': 1000})
+            expect(settings.get_by_role('button', name='Lavanda', exact=True)).to_be_visible()
+            assert settings.evaluate("el => el.shadowRoot.querySelector('.light-settings').scrollWidth <= el.clientWidth")
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.evaluate("panel.hass = {...testHass,language:'en-GB'}")
+        expect(settings.get_by_text('62.5% · #A88BFF', exact=True)).to_be_visible()
+        expect(settings.get_by_text('On-screen preview', exact=True)).to_be_visible()
+        page.evaluate("panel.hass = testHass")
+        brightness.press('Home')
+        expect(settings.get_by_text('0% · #A88BFF', exact=True)).to_be_visible()
+        settings.get_by_label('Usa valore predefinito', exact=True).check()
+        expect(brightness).to_be_disabled()
+        settings.get_by_role('button', name='Predefinita', exact=True).click()
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).quick_actions[0].value")
+        assert not {'brightness_pct', 'rgb_color', 'color_temp_kelvin'} & saved.keys()
+        settings.get_by_role('button', name='Colore', exact=True).click()
+        page.get_by_label('Destinatario', exact=True).select_option('light.extra')
+        expect(settings.get_by_role('button', name='Colore', exact=True)).to_have_count(0)
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).quick_actions[0].value")
+        assert saved['entity_id'] == 'light.extra' and 'rgb_color' not in saved
+        assert not page.evaluate("calls.some(x=>x.type==='call_service')")
         print(json.dumps({'product_components': 'passed', 'themes': 2, 'widths': [1440, 390, 320], 'load_actuations': 0}))
         browser.close()
 finally:
