@@ -542,6 +542,12 @@ class ManagedSwitchConfigButtonAction:
         self.loop_interval = int(config.get('loop_interval', LOOP_INTERVAL_DEFAULT))
         self.blueprint: BlueprintButtonAction = blueprint_action
 
+        if self.mode != 'queued' and not self.loop:
+            from .farhome.selector import is_selector_feedback
+
+            if is_selector_feedback(self.sequence):
+                self.mode = 'queued'
+
         self.script: Script = None
         self.active = bool(self.sequence)
         self._loop_stop = asyncio.Event()

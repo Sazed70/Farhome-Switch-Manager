@@ -18,8 +18,9 @@ Nessuna release applicativa.
   locali `device_icons` non vengono esposti o copiati automaticamente.
 - Gesti definiti dal blueprint, con moduli rapidi per entità light/fan/switch/scene/
   script e target d'area (`area_id`) per comandare tutte le luci o i dispositivi di una
-  stanza con un singolo gesto. Capacità e servizi sono validati anche sul backend. Un ventilatore offre
-  velocità solo se la supporta; un’entità unavailable conserva il suo identificatore.
+  stanza con un singolo gesto. Capacità e servizi sono validati anche sul backend.
+  La velocità è disponibile per un singolo ventilatore che la supporta e viene
+  rimossa passando a una stanza. Un’entità unavailable conserva il suo identificatore.
 - Sequenze non completamente riconosciute restano avanzate e passano all’editor
   HA corrente. La sostituzione rapida è esplicita e riguarda un solo gesto.
   L’editor nuovo non invia azioni a luci, ventilatori o prese durante la configurazione.
@@ -44,9 +45,11 @@ Nessuna release applicativa.
   e attivare il pulsante. **Crea e collega** crea l’helper nella categoria **Farhome**
   della schermata Helper di Home Assistant. Gli helper riusati conservano la propria
   categoria. **Salva gesti** registra il collegamento. La luce viene letta e validata
-  all’evento. Il passaggio alla luce successiva (`next`) include il feedback visivo
-  a doppio toggle a 500 ms (accensione breve se spenta, micro-lampeggio se accesa),
-  mantenendo la retrocompatibilità di lettura per configurazioni legacy senza feedback.
+  all’esecuzione del gesto. Il passaggio alla luce successiva (`next`) include il
+  feedback visivo a doppio toggle a 500 ms (accensione breve se spenta, micro-lampeggio
+  se accesa). I click ravvicinati vengono messi in coda finché termina il lampeggio
+  precedente. La coda si applica anche ai lampeggi Farhome già salvati. I selettori
+  precedenti senza feedback conservano la loro modalità.
 - Elenco ordinato, luce attiva e iniziale distinti. «Applica elenco» è separato da
   «Salva gesti». Helper UI aggiornati tramite le API native persistenti; helper YAML
   leggibili e utilizzabili, elenco in sola lettura. La modifica di un elenco già

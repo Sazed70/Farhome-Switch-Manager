@@ -205,7 +205,18 @@ def build_selector_action(helper_id, kind, step=10, transition=.1, mode='restart
             {'condition': 'template', 'value_template': "{{ farhome_selected_light is string and farhome_selected_light is match('^light[.][a-z0-9_]+$') and farhome_selected_light in (state_attr('" + helper_id + "', 'options') or []) and has_value(farhome_selected_light) }}"},
             {'action': 'light.turn_on', 'target': {'entity_id': '{{ farhome_selected_light }}'}, 'data': {'brightness_step_pct': step if kind == 'brightness_up' else -step, 'transition': transition}},
         ]
-    return {'mode': mode, 'sequence': sequence}
+    return {'mode': 'queued' if kind == 'next' else mode, 'sequence': sequence}
+
+
+def is_selector_feedback(sequence):
+    """Recognize the generated sequence in configurations saved before queuing."""
+    if not isinstance(sequence, list) or len(sequence) != 6:
+        return False
+    first = sequence[0]
+    target = first.get('target') if isinstance(first, dict) else None
+    helper = target.get('entity_id') if isinstance(target, dict) else None
+    return (isinstance(helper, str) and HELPER.fullmatch(helper) is not None
+            and sequence == build_selector_action(helper, 'next')['sequence'])
 
 
 async def apply_selector_actions(hass, config, binding, patches):
