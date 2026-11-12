@@ -486,7 +486,7 @@ export class FarhomeDeviceEditor extends LitElement{
             <div class="gesture-header">
               <h3>${gestureTitle(this.hass.language,blueprint.buttons[this.indices[0]].actions[this.indices[1]].title)}</h3>
               <div class="segmented">
-                ${!this.readonly?html`<button type="button" aria-pressed=${!this.showAdvanced&&!selector} @click=${this.useQuick} ?disabled=${this.busy}>${this.text('configure_quick')}</button>`:nothing}
+                ${!this.readonly?html`<button type="button" aria-pressed=${!!quick&&!this.showAdvanced} @click=${this.useQuick} ?disabled=${this.busy}>${this.text('configure_quick')}</button>`:nothing}
                 <button type="button" aria-pressed=${this.showAdvanced} @click=${()=>this.showAdvanced=!this.showAdvanced} ?disabled=${this.busy}>${this.text('other_actions')}</button>
               </div>
             </div>
