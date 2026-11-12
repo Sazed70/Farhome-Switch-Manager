@@ -100,7 +100,7 @@ async def async_setup_connections( hass ):
     @websocket_api.require_admin
     @websocket_api.websocket_command({
         vol.Required("type"): "switch_manager/config/monitor", 
-        vol.Optional("config_id"): cv.string
+        vol.Required("config_id"): cv.string
     })
     @websocket_api.async_response
     async def websocket_monitor_config(
@@ -109,6 +109,9 @@ async def async_setup_connections( hass ):
         msg: dict[str, Any],
     ) -> None:
         config = _get_switch_config( hass, msg['config_id'] )
+        if config is None:
+            connection.send_error(msg["id"], "not_found", f"Switch id {msg['config_id']} does not exist")
+            return
 
         @callback
         def send( data ):
