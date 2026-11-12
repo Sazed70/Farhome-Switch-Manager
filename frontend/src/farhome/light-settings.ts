@@ -32,6 +32,13 @@ export class FarhomeLightSettings extends LitElement {
   private lastKelvin?: number;
   private lastColor?: RgbColor;
 
+  protected willUpdate(changed:Map<string,unknown>){
+    const previous=changed.get('entity') as EntityState|undefined;
+    if(changed.has('entity')&&previous?.entity_id!==this.entity?.entity_id){
+      this.lastBrightness=undefined;this.lastKelvin=undefined;this.lastColor=undefined;
+    }
+  }
+
   private text(key:TextKey){return t(this.language,key);}
 
   private get previewBrightness(): number {
