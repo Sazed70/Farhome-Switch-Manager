@@ -115,6 +115,8 @@ try:
         assert area_action['area_id'] == 'studio' and 'percentage' not in area_action
         target.select_option('fan.variable')
         page.get_by_label('Funzione', exact=True).select_option('increase')
+        page.get_by_label('Passo velocità (%)').fill('')
+        expect(page.locator('farhome-device-editor').get_by_role('alert')).to_have_count(0)
         page.get_by_label('Passo velocità (%)').fill('15')
         page.evaluate('window.failSave=true')
         page.get_by_role('button', name='Salva gesti', exact=True).click()
@@ -182,11 +184,14 @@ try:
         page.get_by_label('Luce da aggiungere').select_option('light.extra')
         page.get_by_role('button', name='Aggiungi luce', exact=True).click()
         page.get_by_role('button', name='Rimuovi Extra', exact=True).click()
+        page.get_by_label('Luce iniziale').select_option('')
+        expect(page.get_by_label('Luce iniziale')).to_have_value('')
         page.get_by_role('button', name='Applica elenco', exact=True).click()
         expect(page.get_by_text('Elenco applicato', exact=True)).to_be_visible()
         helper_save = page.evaluate("calls.filter(x=>x.type.endsWith('/selector/update')).at(-1)")
         assert helper_save['options'] == ['light.ceiling', 'light.desk']
         assert helper_save['active'] is None
+        assert helper_save['initial'] == ''
         page.locator('[data-gesture="0:0"]').click()
         page.get_by_role('button', name='Usa selettore per questo gesto', exact=True).click()
         page.get_by_role('button', name='Conferma gesto selettore', exact=True).click()

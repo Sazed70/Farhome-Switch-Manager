@@ -166,7 +166,7 @@ async def async_setup_connections( hass ):
     @websocket_api.websocket_command({
         vol.Required("type"): "switch_manager/config/delete",
         vol.Optional('expected_revision'): vol.Any(str, None),
-        vol.Optional("config_id"): cv.string
+        vol.Required("config_id"): cv.string
     })
     @websocket_api.async_response
     async def websocket_delete_config(
