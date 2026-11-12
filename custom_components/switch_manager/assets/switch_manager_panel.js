@@ -1409,7 +1409,7 @@ const Pe="important",Ne=" !"+Pe,Be=Zt(class extends Qt{constructor(t){if(super(t
             <div class="gesture-header">
               <h3>${Ct(this.hass.language,t.buttons[this.indices[0]].actions[this.indices[1]].title)}</h3>
               <div class="segmented">
-                ${this.readonly?F:U`<button type="button" aria-pressed=${!this.showAdvanced&&!s} @click=${this.useQuick} ?disabled=${this.busy}>${this.text("configure_quick")}</button>`}
+                ${this.readonly?F:U`<button type="button" aria-pressed=${!!i&&!this.showAdvanced} @click=${this.useQuick} ?disabled=${this.busy}>${this.text("configure_quick")}</button>`}
                 <button type="button" aria-pressed=${this.showAdvanced} @click=${()=>this.showAdvanced=!this.showAdvanced} ?disabled=${this.busy}>${this.text("other_actions")}</button>
               </div>
             </div>
