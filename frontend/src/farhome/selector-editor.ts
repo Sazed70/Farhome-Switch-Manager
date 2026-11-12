@@ -116,13 +116,20 @@ export class FarhomeSelectorEditor extends LitElement{
         <div class="fields">${(['active','initial'] as const).map(key=>{const selected=key==='active'?(this.active??value.active):(this.initial===''?null:(this.initial??value.initial));return html`<label>${this.text(key==='active'?'active_light':'initial_light')}<select aria-label=${this.text(key==='active'?'active_light':'initial_light')} ?disabled=${this.busy} @change=${(e:Event)=>{const option=(e.target as HTMLSelectElement).value;if(key==='active')this.active=option||null;else this.initial=option;this.emitDirty(true);}}><option value="" .selected=${selected===null||!this.options.includes(selected)}>${this.text(key==='initial'&&selected===null?'no_initial':'choose')}</option>${this.options.map(id=>html`<option value=${id} .selected=${selected===id}>${this.name(id)}</option>`)}</select></label>`;})}</div>
         ${!this.validDraft()?html`<p class="notice">${this.text('list_invalid')}</p>`:nothing}
       `:nothing}
-      <details><summary>${this.text('known_dependencies')} · ${value.known_references.length}</summary><p class="muted">${this.text('dependencies_notice')}</p><ul>${value.known_references.map(ref=>html`<li>${this.text(ref.type==='automation'?'reference_automation':'reference_config')} · ${ref.id}</li>`)}</ul></details>
+      <details class="card"><summary><span>${this.text('known_dependencies')} · ${value.known_references.length}</span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="details-body stack"><p class="muted">${this.text('dependencies_notice')}</p><ul>${value.known_references.map(ref=>html`<li>${this.text(ref.type==='automation'?'reference_automation':'reference_config')} · ${ref.id}</li>`)}</ul></div></details>
       ${this.editable&&value.known_references.length>1?html`<label class="check"><input type="checkbox" .checked=${this.ack} ?disabled=${this.busy} @change=${(e:Event)=>this.ack=(e.target as HTMLInputElement).checked}>${this.text('dependencies_ack')}</label>`:nothing}
     `:nothing}
     <div class="actions">${this.editable?html`<button ?disabled=${this.busy||!this.dirty||!this.validDraft()||(!this.ack&&value!.known_references.length>1)} @click=${this.apply}>${this.text('apply_list')}</button><button ?disabled=${this.busy||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>`:nothing}<button ?disabled=${this.busy||this.loading} @click=${this.reload}>${this.text('reload_list')}</button></div>
     <span role="status">${this.applied?this.text('list_applied'):this.dirty?this.text('dirty'):''}</span>
   </div>`;}
   static styles=[controls,css`
-    ol{margin:0;padding:0;list-style-position:inside}ol li{display:flex;align-items:center;gap:12px;border-top:1px solid var(--divider-color);padding:12px 0}.light-name{display:grid;gap:4px;min-width:0;flex:1;overflow-wrap:anywhere}.list-actions{display:flex;gap:6px}.list-actions button{padding:8px 10px;font-size:13px}.fields{align-items:end}details{font-size:13px}summary{cursor:pointer;min-height:44px;padding:10px 0}ul{padding-left:20px;overflow-wrap:anywhere}@media(max-width:500px){ol li{flex-wrap:wrap}.light-name{flex-basis:100%}.list-actions{margin-left:auto}}
+    ol{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+    ol li{display:flex;align-items:center;gap:12px;border:1px solid var(--fh-border);border-radius:var(--fh-radius-sm);background:var(--fh-surface);padding:10px 12px}
+    .light-name{display:grid;gap:3px;min-width:0;flex:1;overflow-wrap:anywhere}
+    .list-actions{display:flex;gap:6px}
+    .list-actions button{min-height:34px;padding:6px 10px;font-size:13px}
+    .fields{align-items:end}
+    ul{margin:0;padding-left:20px;overflow-wrap:anywhere}
+    @media(max-width:500px){ol li{flex-wrap:wrap}.light-name{flex-basis:100%}.list-actions{margin-left:auto}}
   `];
 }
