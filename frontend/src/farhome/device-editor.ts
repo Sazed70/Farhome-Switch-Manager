@@ -1,5 +1,5 @@
 import {LitElement,html,css,nothing} from 'lit';
-import {customElement,property,state} from 'lit/decorators.js';
+import {customElement,property,state,query} from 'lit/decorators.js';
 import {live} from 'lit/directives/live.js';
 import {keyed} from 'lit/directives/keyed.js';
 import {repeat} from 'lit/directives/repeat.js';
@@ -9,7 +9,7 @@ import type {FarhomeHass,Controller,BlueprintChoice,ConfigEnvelope,EditableConfi
 import {FarhomeApi} from './api.js';
 import {t,TextKey,errorKey,gestureTitle} from './i18n.js';
 import {controls} from './styles.js';
-import {dialogKeys} from './dialog.js';
+import {syncModalDialog} from './dialog.js';
 import {matchingGestures,sharesIdentifier} from './blueprint-change.js';
 import {buildQuickAction,parseQuickAction,supportedQuickActions,supportedAreaQuickActions,supportsBrightness,supportsColor,supportsColorTemperature,lightTemperatureRange,buildSelectorAction,parseSelectorAction} from './actions.js';
 import {FarhomeSelectorEditor} from './selector-editor.js';
@@ -53,6 +53,9 @@ export class FarhomeDeviceEditor extends LitElement{
   @state() private selectorKind:SelectorKind='next';
   @state() private selectorStep=10;
   @state() private selectorTransition=.1;
+  @query('dialog.delete-dialog') private deleteDialog?:HTMLDialogElement;
+  @query('dialog.activation-dialog') private activationDialog?:HTMLDialogElement;
+  @query('dialog.replace-dialog') private replaceDialog?:HTMLDialogElement;
   private quick=new Map<string,QuickAction>();
   protected selectors=new Map<string,SelectorPatch>();
   private token=0;
@@ -106,7 +109,9 @@ export class FarhomeDeviceEditor extends LitElement{
       const previous=changed.get('controller') as Controller|undefined;
       if(previous?.device_id!==this.controller.device_id||(!this.draft&&previous.config_ids.length!==this.controller.config_ids.length))this.openController();
     }
-    if((changed.has('replacePending')&&this.replacePending)||(changed.has('activationPending')&&this.activationPending)||(changed.has('deletePending')&&this.deletePending))this.renderRoot.querySelector<HTMLButtonElement>('[role=dialog] button:last-child')?.focus();
+    syncModalDialog(this.deleteDialog,this.deletePending&&!!this.envelope);
+    syncModalDialog(this.activationDialog,this.activationPending);
+    syncModalDialog(this.replaceDialog,this.replacePending);
   }
   private async openController(){
     this.deletePending=false;
@@ -423,7 +428,7 @@ export class FarhomeDeviceEditor extends LitElement{
     const options=Object.values(this.hass.states).filter(entity=>/^input_select\.[a-z0-9_]+$/.test(entity.entity_id)
       &&Array.isArray(entity.attributes.options)&&entity.attributes.options.length>0
       &&entity.attributes.options.every((id:unknown)=>typeof id==='string'&&/^light\.[a-z0-9_]+$/.test(id)&&!!this.hass.states[id]));
-    return html`<details open=${helper||this.creatingSelector?true:nothing}><summary>${this.text('selector')}</summary><div class="stack setup">
+    return html`<details class="card" open=${helper||this.creatingSelector?true:nothing}><summary><span>${this.text('selector')}${helper?html` <small class="muted">· ${helper}</small>`:nothing}</span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="details-body stack setup">
       ${!canLink?html`<p class="muted">${this.text('helper_requires_disabled')}</p>`:this.creatingSelector?html`<farhome-selector-editor creating .hass=${this.hass} .suggestedName=${`${this.draft!.name} · ${this.text('selector')}`.slice(0,255)}
         @selector-created=${(e:CustomEvent<{entity_id:string}>)=>{this.setCreatingSelector(false);this.linkSelector(e.detail.entity_id);}}
         @selector-create-cancel=${()=>this.setCreatingSelector(false)} @helper-dirty-changed=${this.helperDraftChanged}></farhome-selector-editor>`:html`
@@ -453,8 +458,21 @@ export class FarhomeDeviceEditor extends LitElement{
     if(!this.controller)return nothing;
     const blueprint=this.blueprint;const action=this.action;const quick=this.currentQuick;const selector=action&&parseSelectorAction(action);
     const queuedFeedback=selector?.kind==='next'&&action!.sequence.length>1;
-    return html`<section class="stack" aria-label=${this.controller.name}>
-      <header class="device-heading"><farhome-thumbnail large .asset=${this.controller.image}></farhome-thumbnail><div><h2>${this.controller.name}</h2><p class="muted">${this.controller.manufacturer} ${this.controller.model}</p><p class="status">${this.text(this.controller.management==='farhome'?'managed':this.controller.management==='external'?'external':'unknown')} · ${this.text(this.controller.compatibility==='verified'?'verified':'unverified')}</p></div></header>
+    return html`<section class="stack editor-root" aria-label=${this.controller.name}>
+      <header class="device-heading">
+        <div class="device-heading-main">
+          <farhome-thumbnail large .asset=${this.controller.image}></farhome-thumbnail>
+          <div class="device-heading-copy">
+            <div class="row">
+              <h2>${this.controller.name}</h2>
+              ${this.draft?html`<span class="badge ${this.draft.enabled?'active':'inactive'}"><span class="badge-dot" aria-hidden="true"></span>${this.text(this.draft.enabled?'enabled':'disabled')}</span>`:nothing}
+            </div>
+            <p class="muted">${this.controller.manufacturer} ${this.controller.model}</p>
+            <p class="status">${this.text(this.controller.management==='farhome'?'managed':this.controller.management==='external'?'external':'unknown')} · ${this.text(this.controller.compatibility==='verified'?'verified':'unverified')}</p>
+          </div>
+        </div>
+        ${!this.readonly&&this.envelope&&this.draft?html`<button ?disabled=${this.saving||this.hasDirty||this.changingBlueprint} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}
+      </header>
       ${this.blueprintHint()}
       ${this.error?html`<div class="notice" role="alert">${this.text(this.error)}${!this.draft?html` <button @click=${()=>this.pickedConfig?this.load(this.pickedConfig):this.loadBlueprints()}>${this.text('retry')}</button>`:nothing}</div>`:nothing}
       ${this.loading?html`<p role="status">${this.text('loading')}</p>`:nothing}
@@ -463,52 +481,94 @@ export class FarhomeDeviceEditor extends LitElement{
       ${this.showsSetupForm?this.setupForm():nothing}
       ${this.draft?html`
         ${!blueprint?html`<p class="notice">${this.text('no_blueprint')}</p>`:html`
-          <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;return html`<button data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;this.selectorPending=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${gestureTitle(this.hass.language,item.title)}</button>`;}))}</div>
-          ${action?html`<div class="gesture-editor stack"><h3>${gestureTitle(this.hass.language,blueprint.buttons[this.indices[0]].actions[this.indices[1]].title)}</h3>
+          <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;const configured=(this.draft?.buttons[b]?.actions[a]?.sequence.length||0)>0||this.quick.has(key)||this.selectors.has(key);return html`<button class=${configured?'configured':''} data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;this.selectorPending=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${gestureTitle(this.hass.language,item.title)}</button>`;}))}</div>
+          ${action?html`<div class="gesture-editor stack">
+            <div class="gesture-header">
+              <h3>${gestureTitle(this.hass.language,blueprint.buttons[this.indices[0]].actions[this.indices[1]].title)}</h3>
+              <div class="segmented">
+                ${!this.readonly?html`<button type="button" aria-pressed=${!this.showAdvanced&&!selector} @click=${this.useQuick} ?disabled=${this.busy}>${this.text('configure_quick')}</button>`:nothing}
+                <button type="button" aria-pressed=${this.showAdvanced} @click=${()=>this.showAdvanced=!this.showAdvanced} ?disabled=${this.busy}>${this.text('other_actions')}</button>
+              </div>
+            </div>
             ${quick&&!this.showAdvanced?this.quickForm(quick):selector&&!this.showAdvanced?nothing:html`<p>${this.text(action.sequence.length?'advanced':'no_action')}</p>${action.sequence.length?html`<p class="muted">${this.text('advanced_notice')}</p>`:nothing}`}
             ${this.selectorGesture()}
-            <div class="actions">${!this.readonly?html`<button @click=${this.useQuick} ?disabled=${this.busy}>${this.text('configure_quick')}</button>`:nothing}<button @click=${()=>this.showAdvanced=!this.showAdvanced} ?disabled=${this.busy}>${this.text('other_actions')}</button></div>
             ${this.showAdvanced?html`<ha-automation-action .hass=${this.hass} .actions=${action.sequence} .disabled=${this.busy||this.readonly} .narrow=${this.narrow} @value-changed=${this.advancedChanged}></ha-automation-action>`:nothing}
             <label>${this.text('mode')}<select aria-label=${this.text('mode')} ?disabled=${this.busy||this.readonly||queuedFeedback} @change=${(e:Event)=>{action.mode=(e.target as HTMLSelectElement).value;if(quick)this.quick.set(this.selected,{...quick,mode:action.mode as ScriptMode});const selectorPatch=this.selectors.get(this.selected);if(selectorPatch)this.selectors.set(this.selected,{...selectorPatch,mode:action.mode as ScriptMode});this.changed();}}>${(['single','restart','queued','parallel'] as const).map(mode=>html`<option value=${mode} .selected=${mode===(queuedFeedback?'queued':action.mode)}>${this.text(`mode_${mode}`)}</option>`)}</select></label>
             ${blueprint.buttons[this.indices[0]].actions[this.indices[1]].release_index!=null?html`<label class="check"><input type="checkbox" .checked=${!!action.loop} ?disabled=${this.busy||this.readonly} @change=${(e:Event)=>{action.loop=(e.target as HTMLInputElement).checked;if(quick)this.quick.set(this.selected,{...quick,loop:action.loop});this.changed();}}>${this.text('loop')}</label>${action.loop?html`<label>${this.text('loop_interval')}<input type="number" min="50" max="5000" step="1" .value=${String(action.loop_interval??250)} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{const n=(e.target as HTMLInputElement).valueAsNumber;if(!Number.isFinite(n))return;action.loop_interval=n;if(quick)this.quick.set(this.selected,{...quick,loop_interval:n});this.changed();}}></label>`:nothing}`:nothing}
           </div>`:nothing}`}
         ${this.selectorSection()}
-        ${!this.readonly?html`<details ?open=${this.changingBlueprint||!this.draft.identifier.trim()}>
-          <summary>${this.text('setup')}</summary><div class="stack setup">
+        ${!this.readonly?html`<details class="card" ?open=${this.changingBlueprint||!this.draft.identifier.trim()}>
+          <summary><span>${this.text('setup')}</span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="details-body stack setup">
           <label>${this.text('name')}<input .value=${this.draft.name} maxlength="255" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.name=(e.target as HTMLInputElement).value;this.changed();}}></label>
           <label>${this.text('identifier')}<input .value=${this.draft.identifier} maxlength="1024" required ?disabled=${this.busy} @input=${(e:Event)=>{this.draft!.identifier=(e.target as HTMLInputElement).value;this.changed();}}></label>
           ${this.changingBlueprint?this.blueprintChange():html`<div><button ?disabled=${this.saving||this.hasHelperDirty} @click=${this.openBlueprintChange}>${this.text('blueprint_change')}</button></div>`}
           </div></details>`:nothing}
-        <footer class="row">
-          ${!this.readonly?html`
-            <button class="primary" ?disabled=${this.saving||this.creatingSelector||this.changingBlueprint||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button>
-            <button ?disabled=${this.saving||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>
-            ${this.envelope?html`<button ?disabled=${this.saving||this.hasDirty||this.changingBlueprint} @click=${()=>this.toggle()}>${this.text(this.draft.enabled?'disable':'enable')}</button>`:nothing}
-          `:nothing}
-          ${this.envelope?html`<button data-delete-configuration ?disabled=${!this.canDelete} @click=${()=>this.deletePending=true}>${this.text('delete_configuration')}</button>`:nothing}
-          <span role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span>
+        <footer class="sticky-footer">
+          <div class="row">
+            ${!this.readonly?html`
+              <button class="primary" ?disabled=${this.saving||this.creatingSelector||this.changingBlueprint||!this.dirty||!blueprint} @click=${()=>this.save()}>${this.text('save')}</button>
+              <button ?disabled=${this.saving||!this.dirty} @click=${this.discard}>${this.text('cancel')}</button>
+            `:nothing}
+            <span class=${`status-pill ${this.dirty?'dirty':''}`} role="status">${this.text(this.busy?'saving':this.saved?'saved':this.dirty?'dirty':this.draft.enabled?'enabled':'disabled')}</span>
+          </div>
+          ${this.envelope?html`<button class="danger-ghost" data-delete-configuration ?disabled=${!this.canDelete} @click=${()=>this.deletePending=true}>${this.text('delete_configuration')}</button>`:nothing}
         </footer>
       `:nothing}
-      ${this.deletePending&&this.envelope?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true"
-        aria-label=${this.text('delete_configuration')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.closeDeleteConfirmation())}>
+      ${this.envelope?html`<dialog class="delete-dialog" aria-label=${this.text('delete_configuration')} @cancel=${(e:Event)=>{e.preventDefault();this.closeDeleteConfirmation();}}>
+        <h3>${this.text('delete_configuration')}</h3>
         <p><strong>${this.envelope.config.name} · ID ${this.envelope.config_id}</strong></p>
-        <p>${this.text('delete_configuration_notice')}</p>
+        <p class="muted">${this.text('delete_configuration_notice')}</p>
         <div class="actions">
           <button class="delete-confirm" @click=${this.deleteConfiguration}>${this.text('delete_configuration_confirm')}</button>
-          <button @click=${this.closeDeleteConfirmation}>${this.text('cancel')}</button>
+          <button autofocus @click=${this.closeDeleteConfirmation}>${this.text('cancel')}</button>
         </div>
-      </div></div>`:nothing}
-      ${this.activationPending?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true"
-        aria-label=${this.text('verify_activation')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.activationPending=false)}>
-        <p>${this.text('verify_activation_details')}</p><div class="actions">
-          <button @click=${()=>this.toggle(true)}>${this.text('confirm_activation')}</button>
-          <button @click=${()=>this.activationPending=false}>${this.text('cancel')}</button>
+      </dialog>`:nothing}
+      <dialog class="activation-dialog" aria-label=${this.text('verify_activation')} @cancel=${(e:Event)=>{e.preventDefault();this.activationPending=false;}}>
+        <h3>${this.text('verify_activation')}</h3>
+        <p class="muted">${this.text('verify_activation_details')}</p>
+        <div class="actions">
+          <button class="primary" @click=${()=>this.toggle(true)}>${this.text('confirm_activation')}</button>
+          <button autofocus @click=${()=>this.activationPending=false}>${this.text('cancel')}</button>
         </div>
-      </div></div>`:nothing}
-      ${this.replacePending?html`<div class="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true" aria-label=${this.text('replace')} @keydown=${(e:KeyboardEvent)=>dialogKeys(e,()=>this.replacePending=false)}><p>${this.text('replace_advanced')}</p><div class="actions"><button @click=${this.replaceWithQuick}>${this.text('replace')}</button><button @click=${()=>this.replacePending=false}>${this.text('cancel')}</button></div></div></div>`:nothing}
+      </dialog>
+      <dialog class="replace-dialog" aria-label=${this.text('replace')} @cancel=${(e:Event)=>{e.preventDefault();this.replacePending=false;}}>
+        <h3>${this.text('replace')}</h3>
+        <p class="muted">${this.text('replace_advanced')}</p>
+        <div class="actions">
+          <button class="primary" @click=${this.replaceWithQuick}>${this.text('replace')}</button>
+          <button autofocus @click=${()=>this.replacePending=false}>${this.text('cancel')}</button>
+        </div>
+      </dialog>
     </section>`;
   }
   static styles=[controls,css`
-    section{padding:28px}section.notice{padding:14px}.delete-confirm{color:var(--error-color,#b3261e)}.blueprint-choice{margin-top:8px;justify-content:space-between}.device-heading{display:flex;align-items:center;gap:20px;min-width:0}.device-heading>div{min-width:0}h2{overflow-wrap:anywhere;line-height:1.4}.gesture-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--divider-color);padding:0 0 20px}.gesture-tabs button{font-size:13px;text-align:left}.gesture-tabs [aria-pressed=true]{color:var(--primary-color);border-color:var(--primary-color);font-weight:600}.gesture-editor{padding-block:4px 16px}footer{border-top:1px solid var(--divider-color);padding-top:20px}details{border-top:1px solid var(--divider-color);padding-top:20px}summary{cursor:pointer;min-height:44px;padding:10px 0}.setup{padding-top:12px}ha-automation-action{min-width:0}@media(max-width:600px){section{padding:20px 16px}.device-heading{align-items:flex-start;gap:12px}.device-heading h2{font-size:20px}farhome-thumbnail[large]{width:64px;height:64px}}
+    .editor-root{padding:24px 28px 0}
+    section.notice{padding:14px}
+    .delete-confirm{background:var(--fh-danger);border-color:var(--fh-danger);color:#fff;font-weight:600}
+    .delete-confirm:hover:not(:disabled){filter:brightness(1.06);background:var(--fh-danger)}
+    .blueprint-choice{margin-top:8px;justify-content:space-between}
+    .device-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--fh-border)}
+    .device-heading-main{display:flex;align-items:center;gap:16px;min-width:0}
+    .device-heading-copy{min-width:0;display:grid;gap:4px}
+    h2{overflow-wrap:anywhere;line-height:1.35}
+    .gesture-tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .gesture-tabs button{display:inline-flex;align-items:center;gap:8px;font-size:13px;text-align:left;min-height:36px;padding:6px 12px;border-radius:var(--fh-radius-pill)}
+    .gesture-tabs button::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--fh-border);flex:none}
+    .gesture-tabs button.configured::before{background:var(--fh-accent)}
+    .gesture-tabs [aria-pressed=true]{color:var(--fh-accent);border-color:var(--fh-accent);background:color-mix(in srgb,var(--fh-accent) 10%,var(--fh-surface));font-weight:600}
+    .gesture-editor{padding:18px 20px;border-radius:var(--fh-radius);background:var(--fh-surface-subtle);border:1px solid var(--fh-border)}
+    .gesture-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .sticky-footer{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:4px -28px 0;padding:14px 28px;background:var(--fh-surface);border-top:1px solid var(--fh-border)}
+    .status-pill{font-size:12px;color:var(--fh-muted);font-weight:500}
+    .status-pill.dirty{color:var(--fh-warning);font-weight:600}
+    .setup{padding-top:12px}
+    ha-automation-action{min-width:0}
+    @media(max-width:600px){
+      .editor-root{padding:18px 16px 0}
+      .sticky-footer{margin:4px -16px 0;padding:12px 16px}
+      .device-heading{align-items:flex-start;gap:12px}
+      .device-heading h2{font-size:18px}
+      farhome-thumbnail[large]{width:60px;height:60px}
+    }
   `];
 }
