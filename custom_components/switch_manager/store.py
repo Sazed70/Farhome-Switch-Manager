@@ -98,6 +98,14 @@ class SwitchManagerStore:
         """Take a persistence snapshot without retaining runtime script references."""
         return json.loads(json.dumps(self.asdict(), default=lambda value: value.as_dict()))
 
+    def plain_config(self, config_id: str) -> dict:
+        """Return a plain dict snapshot for one managed switch without serializing all configs."""
+        raw = self.data.managed_switches.get(str(config_id))
+        if raw is None:
+            return {}
+        data = raw.asdict() if hasattr(raw, 'asdict') else raw
+        return json.loads(json.dumps(data, default=lambda value: value.as_dict()))
+
     async def async_write_config(self, config_id, config):
         """Persist before replacing the in-memory store; callers serialize writes."""
         candidate = self.plain_data()

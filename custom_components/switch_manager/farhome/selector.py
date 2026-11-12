@@ -155,14 +155,19 @@ async def async_update_selector(hass, entity_id, options, active, initial, expec
             if len(before['known_references']) > 1 and not dependencies_acknowledged:
                 raise FarhomeError('dependencies_acknowledgment_required', 'Conferma i riferimenti condivisi conosciuti.')
             validate_light_options(hass, options)
-            for value, previous in ((active, before['active']), (initial, before['initial'])):
-                if value is not None and (not isinstance(value, str) or value not in options):
-                    raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
-                if value is None and previous is not None and previous not in options:
-                    raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
+            if active is not None and (not isinstance(active, str) or active not in options):
+                raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
+            if active is None and before['active'] is not None and before['active'] not in options:
+                raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
+            if initial is not None and initial != '' and (not isinstance(initial, str) or initial not in options):
+                raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
+            if initial is None and before['initial'] is not None and before['initial'] not in options:
+                raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
             candidate = {key: deepcopy(value) for key, value in item.items() if key != 'id'}
             candidate['options'] = deepcopy(options)
-            if initial is not None:
+            if initial == '':
+                candidate.pop('initial', None)
+            elif initial is not None:
                 candidate['initial'] = initial
             changed = candidate != {key: value for key, value in item.items() if key != 'id'}
             try:

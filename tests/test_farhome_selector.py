@@ -145,6 +145,11 @@ class SelectorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['active'], 'light.b')
         self.assertEqual(result['initial'], 'light.b')
 
+    async def test_clearing_initial_removes_it_from_storage(self):
+        result = await self.update(['light.b'], 'light.b', '')
+        self.assertIsNone(result['initial'])
+        self.assertNotIn('initial', self.collection.async_items()[0])
+
     async def test_shared_helper_requires_acknowledgment(self):
         await self.metadata.async_update(self.metadata.revision, {'bindings': {'2': {'device_id': 'device', 'selector_helper': 'input_select.renamed'}}})
         with self.assertRaisesRegex(ValueError, 'dependencies_acknowledgment_required'):

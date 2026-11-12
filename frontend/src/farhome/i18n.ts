@@ -56,6 +56,7 @@ const extra={
   light_blue:['Azzurro','Sky blue'],light_lavender:['Lavanda','Lavender'],light_pink:['Rosa','Pink'],light_amber:['Ambra','Amber'],
   selector_function:['Funzione selettore','Selector function'],next_light:['Seleziona luce successiva','Select next light'],dim_up:['Aumenta luminosità selezionata','Increase selected brightness'],dim_down:['Riduci luminosità selezionata','Decrease selected brightness'],
   selector_summary:['Verrà sostituito soltanto questo gesto. Gli altri gesti, inclusi doppio click, pressione prolungata e feedback avanzati, restano invariati.','Only this gesture will be replaced. Other gestures, including double click, hold and advanced feedback, stay unchanged.'],
+  selector_no_dim:['La regolazione luminosità è disponibile solo se tutte le luci dell’elenco la supportano.','Brightness dimming is available only when every light in the list supports it.'],
   configuration:['Configurazione','Configuration'],choose_configuration:['Scegli una configurazione','Choose a configuration'],
   add_button:['Aggiungi pulsante','Add controller'],registered_device:['Dispositivo registrato','Registered device'],add_to_list:['Aggiungi alla lista','Add to list'],
   associate_device:['Dispositivo da associare','Device to associate'],link_config:['Collega configurazione','Link configuration'],

@@ -33,7 +33,7 @@ def _read(hass, config_id):
     snapshot = config_snapshot(current)
     # Preserve opaque wrapper fields from storage while reflecting runtime changes
     # (e.g. variables changed by switch_manager.set_variables) in the revision.
-    stored = store.plain_data()['managed_switches'].get(str(config_id), {})
+    stored = store.plain_config(config_id) if hasattr(store, 'plain_config') else store.plain_data()['managed_switches'].get(str(config_id), {})
     for button_index, button in enumerate(snapshot['buttons']):
         old_buttons = stored.get('buttons', [])
         for action_index, action in enumerate(button['actions']):
@@ -295,7 +295,8 @@ async def async_set_enabled(hass, config_id, enabled, expected_revision, conflic
         if not enabled:
             # Disabling must also work for a missing/mismatched blueprint. Keep
             # its original stored buttons so this recovery action loses no data.
-            data = {**current['config'], **store.plain_data()['managed_switches'].get(str(config_id), {})}
+            stored = store.plain_config(config_id) if hasattr(store, 'plain_config') else store.plain_data()['managed_switches'].get(str(config_id), {})
+            data = {**current['config'], **stored}
             if isinstance(data['blueprint'], dict):
                 data['blueprint'] = data['blueprint']['id']
             data['enabled'] = False

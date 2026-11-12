@@ -170,7 +170,7 @@ async def async_snapshot(hass):
     configs = {str(key): config_snapshot(value) for key, value in hass.data[DOMAIN][CONF_MANAGED_SWITCHES].items()}
     definitions, warnings = await async_definitions(hass)
     for item in definitions:
-        if item["definition"].get("model") in ("ZG-101ZD", "ZG-101ZL"):
+        if str(item["definition"].get("model") or "").upper() in ("ZG-101ZD", "ZG-101ZL"):
             entity_id = entity_registry.async_get_entity_id(
                 "select", "mqtt", f"{item['ieee_address']}_operation_mode_zigbee2mqtt"
             )
