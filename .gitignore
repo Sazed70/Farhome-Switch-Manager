@@ -13,5 +13,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/.test-build/
 
-# Local AI assistant instructions (kept locally, not tracked)
+# Local AI assistant instructions and temporary session artifacts (kept locally, not tracked)
 CLAUDE.md
+.agents/
+.superpowers/
