@@ -4,18 +4,27 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from homeassistant.core import HomeAssistant
 from homeassistant.components.automation.const import DATA_COMPONENT
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import Unauthorized
-from custom_components.switch_manager.const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
+
+from custom_components.switch_manager.connections import async_setup_connections
+from custom_components.switch_manager.const import (
+    CONF_BLUEPRINTS,
+    CONF_MANAGED_SWITCHES,
+    CONF_STORE,
+    DOMAIN,
+)
+from custom_components.switch_manager.farhome.config_service import (
+    async_duplicate_config,
+    async_read_all_configs,
+    async_read_config,
+    async_save_config,
+    async_set_enabled,
+)
+from custom_components.switch_manager.farhome.store import FarhomeStore
 from custom_components.switch_manager.models import Blueprint, ManagedSwitchConfig
 from custom_components.switch_manager.store import SwitchManagerStore
-from custom_components.switch_manager.connections import async_setup_connections
-from custom_components.switch_manager.farhome.store import FarhomeStore
-from custom_components.switch_manager.farhome.config_service import (
-    async_read_config, async_read_all_configs, async_save_config, async_set_enabled,
-    async_duplicate_config,
-)
 from tests.fixtures import MemoryStorage
 
 
@@ -105,9 +114,11 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         updated = self.draft()
         updated["id"] = initial["config_id"]
         updated["name"] = "Must not replace"
-        with patch.object(self.store.store, 'async_save', AsyncMock(side_effect=OSError('disk full'))):
-            with self.assertRaisesRegex(ValueError, "persistence_failed"):
-                await async_save_config(self.hass, updated, None, initial["revision"])
+        with (
+            patch.object(self.store.store, 'async_save', AsyncMock(side_effect=OSError('disk full'))),
+            self.assertRaisesRegex(ValueError, "persistence_failed"),
+        ):
+            await async_save_config(self.hass, updated, None, initial["revision"])
         self.assertIs(self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES][initial["config_id"]], old_runtime)
         self.assertEqual(old_runtime.name, 'Desk')
 
@@ -166,9 +177,11 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         snapshot = {'warnings': [], 'controllers': [{'device_id': 'device', 'blueprint_suggestion': {
             'id': 'synthetic', 'identifier': 'z2m/desk/action', 'reason': 'mode_unknown',
         }}]}
-        with patch('custom_components.switch_manager.farhome.inventory.async_snapshot', AsyncMock(return_value=snapshot)):
-            with self.assertRaisesRegex(ValueError, 'activation_confirmation_required'):
-                await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=False)
+        with (
+            patch('custom_components.switch_manager.farhome.inventory.async_snapshot', AsyncMock(return_value=snapshot)),
+            self.assertRaisesRegex(ValueError, 'activation_confirmation_required'),
+        ):
+            await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=False)
         self.assertEqual(await async_read_config(self.hass, initial['config_id']), initial)
         active = await async_set_enabled(self.hass, initial['config_id'], True, initial['revision'], manual_confirmation=True)
         self.assertTrue(active['config']['enabled'])
@@ -216,16 +229,20 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         async def fail_config_save(data):
             self.metadata_disk.fail = True
             raise OSError('config disk failed after metadata write')
-        with patch.object(self.store.store, 'async_save', fail_config_save):
-            with self.assertRaisesRegex(ValueError, 'partial_write'):
-                await self.create({'device_id': 'device', 'verified': True})
+        with (
+            patch.object(self.store.store, 'async_save', fail_config_save),
+            self.assertRaisesRegex(ValueError, 'partial_write'),
+        ):
+            await self.create({'device_id': 'device', 'verified': True})
         self.assertEqual(self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES], {})
 
     async def test_config_failure_restores_only_own_metadata_binding(self):
         before = self.metadata.snapshot()
-        with patch.object(self.store.store, 'async_save', AsyncMock(side_effect=OSError('config disk failed'))):
-            with self.assertRaisesRegex(ValueError, 'persistence_failed'):
-                await self.create({'device_id': 'device', 'verified': True})
+        with (
+            patch.object(self.store.store, 'async_save', AsyncMock(side_effect=OSError('config disk failed'))),
+            self.assertRaisesRegex(ValueError, 'persistence_failed'),
+        ):
+            await self.create({'device_id': 'device', 'verified': True})
         self.assertEqual(self.metadata.snapshot(), before)
 
     async def test_non_admin_denied(self):
@@ -295,7 +312,9 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
     async def test_replace_runtime_unloads_old_and_start_waits_for_scripts(self):
         # Slow script creation must complete before start() returns.
         gate = asyncio.Event()
-        from custom_components.switch_manager.models import ManagedSwitchConfigButtonAction
+        from custom_components.switch_manager.models import (
+            ManagedSwitchConfigButtonAction,
+        )
         real_make = ManagedSwitchConfigButtonAction._make_script
 
         async def slow_make(self_action, sequence):

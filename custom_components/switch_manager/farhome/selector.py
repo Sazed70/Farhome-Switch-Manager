@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 import re
+from copy import deepcopy
 from types import SimpleNamespace
 
-from homeassistant.helpers import category_registry as cr, entity_registry as er, device_registry as dr
-from ..const import DOMAIN, CONF_MANAGED_SWITCHES
+from homeassistant.helpers import category_registry as cr
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+
+from ..const import CONF_MANAGED_SWITCHES, DOMAIN
 from .config_service import FarhomeError
 from .types import revision
 
@@ -146,49 +149,51 @@ async def async_update_selector(hass, entity_id, options, active, initial, expec
     if not isinstance(entity_id, str) or not HELPER.fullmatch(entity_id):
         raise FarhomeError('validation_error', 'Seleziona un input_select esistente.')
     locks = hass.data[DOMAIN].setdefault('farhome_selector_locks', {})
-    async with locks.setdefault(entity_id, asyncio.Lock()):
-        # Serialize migration/activation changes with this helper edit, too.
-        async with hass.data[DOMAIN]['farhome'].config_lock:
-            before, item = await _read(hass, entity_id, config_id)
-            if before['revision'] != expected_revision:
-                raise FarhomeError('conflict', 'Helper modificato. Ricarica prima di applicare.')
-            if not before['editable']:
-                raise FarhomeError('read_only', 'Helper YAML o controller non ancora migrato.')
-            if len(before['known_references']) > 1 and not dependencies_acknowledged:
-                raise FarhomeError('dependencies_acknowledgment_required', 'Conferma i riferimenti condivisi conosciuti.')
-            validate_light_options(hass, options)
-            if active is not None and (not isinstance(active, str) or active not in options):
-                raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
-            if active is None and before['active'] is not None and before['active'] not in options:
-                raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
-            if initial is not None and initial != '' and (not isinstance(initial, str) or initial not in options):
-                raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
-            if initial is None and before['initial'] is not None and before['initial'] not in options:
-                raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
-            candidate = {key: deepcopy(value) for key, value in item.items() if key != 'id'}
-            candidate['options'] = deepcopy(options)
-            if initial == '':
-                candidate.pop('initial', None)
-            elif initial is not None:
-                candidate['initial'] = initial
-            changed = candidate != {key: value for key, value in item.items() if key != 'id'}
-            try:
-                if changed:
-                    await _native_call(hass, 'input_select/update', input_select_id=item['id'], **candidate)
-                after, stored = await _read(hass, entity_id, config_id)
-                expected_item = {'id': item['id'], **candidate}
-                if stored != expected_item or after['active'] != before['active']:
-                    raise FarhomeError('partial_write', 'Modifica concorrente durante l’applicazione. Ricarica: nessun ripristino automatico è stato tentato.')
-                if active is not None and active != after['active']:
-                    await hass.services.async_call('input_select', 'select_option', {'entity_id': entity_id, 'option': active}, blocking=True)
-                final, stored = await _read(hass, entity_id, config_id)
-                if stored != expected_item or final['active'] != (active if active is not None else before['active']):
-                    raise FarhomeError('partial_write', 'Verifica finale non riuscita. Ricarica lo stato del helper.')
-                return final
-            except FarhomeError:
-                raise
-            except Exception as err:
-                raise FarhomeError('partial_write', 'La lista potrebbe essere già salvata; la selezione attiva non è stata confermata. Ricarica prima di riprovare.') from err
+    # Serialize migration/activation changes with this helper edit, too.
+    async with (
+        locks.setdefault(entity_id, asyncio.Lock()),
+        hass.data[DOMAIN]['farhome'].config_lock,
+    ):
+        before, item = await _read(hass, entity_id, config_id)
+        if before['revision'] != expected_revision:
+            raise FarhomeError('conflict', 'Helper modificato. Ricarica prima di applicare.')
+        if not before['editable']:
+            raise FarhomeError('read_only', 'Helper YAML o controller non ancora migrato.')
+        if len(before['known_references']) > 1 and not dependencies_acknowledged:
+            raise FarhomeError('dependencies_acknowledgment_required', 'Conferma i riferimenti condivisi conosciuti.')
+        validate_light_options(hass, options)
+        if active is not None and (not isinstance(active, str) or active not in options):
+            raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
+        if active is None and before['active'] is not None and before['active'] not in options:
+            raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
+        if initial is not None and initial != '' and (not isinstance(initial, str) or initial not in options):
+            raise FarhomeError('validation_error', 'Selezione non presente nella lista.')
+        if initial is None and before['initial'] is not None and before['initial'] not in options:
+            raise FarhomeError('replacement_required', 'Scegli una nuova luce attiva e iniziale prima di rimuoverle.')
+        candidate = {key: deepcopy(value) for key, value in item.items() if key != 'id'}
+        candidate['options'] = deepcopy(options)
+        if initial == '':
+            candidate.pop('initial', None)
+        elif initial is not None:
+            candidate['initial'] = initial
+        changed = candidate != {key: value for key, value in item.items() if key != 'id'}
+        try:
+            if changed:
+                await _native_call(hass, 'input_select/update', input_select_id=item['id'], **candidate)
+            after, stored = await _read(hass, entity_id, config_id)
+            expected_item = {'id': item['id'], **candidate}
+            if stored != expected_item or after['active'] != before['active']:
+                raise FarhomeError('partial_write', 'Modifica concorrente durante l’applicazione. Ricarica: nessun ripristino automatico è stato tentato.')
+            if active is not None and active != after['active']:
+                await hass.services.async_call('input_select', 'select_option', {'entity_id': entity_id, 'option': active}, blocking=True)
+            final, stored = await _read(hass, entity_id, config_id)
+            if stored != expected_item or final['active'] != (active if active is not None else before['active']):
+                raise FarhomeError('partial_write', 'Verifica finale non riuscita. Ricarica lo stato del helper.')
+            return final
+        except FarhomeError:
+            raise
+        except Exception as err:
+            raise FarhomeError('partial_write', 'La lista potrebbe essere già salvata; la selezione attiva non è stata confermata. Ricarica prima di riprovare.') from err
 
 
 def build_selector_action(helper_id, kind, step=10, transition=.1, mode='restart'):

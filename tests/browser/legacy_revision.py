@@ -1,10 +1,11 @@
 """Run real bundled legacy components against an in-memory HA transport boundary."""
+import json
+import os
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import json
-import os
 from threading import Thread
+
 from playwright.sync_api import sync_playwright
 
 

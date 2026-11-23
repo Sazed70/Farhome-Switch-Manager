@@ -5,10 +5,14 @@ from types import SimpleNamespace
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import Unauthorized
-from custom_components.switch_manager.models import Blueprint
+
 from custom_components.switch_manager.farhome.store import FarhomeStore
 from custom_components.switch_manager.farhome.types import config_snapshot, revision
-from custom_components.switch_manager.farhome.websocket import websocket_snapshot, websocket_metadata
+from custom_components.switch_manager.farhome.websocket import (
+    websocket_metadata,
+    websocket_snapshot,
+)
+from custom_components.switch_manager.models import Blueprint
 
 
 class HomeAssistantBoundaryTests(unittest.IsolatedAsyncioTestCase):
@@ -47,8 +51,16 @@ class HomeAssistantBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unload_and_setup_entry_restores_switches(self):
         from unittest.mock import AsyncMock, patch
-        from custom_components.switch_manager import async_setup_entry, async_unload_entry
-        from custom_components.switch_manager.const import CONF_MANAGED_SWITCHES, CONF_STORE, DOMAIN
+
+        from custom_components.switch_manager import (
+            async_setup_entry,
+            async_unload_entry,
+        )
+        from custom_components.switch_manager.const import (
+            CONF_MANAGED_SWITCHES,
+            CONF_STORE,
+            DOMAIN,
+        )
 
         with tempfile.TemporaryDirectory() as path:
             hass = HomeAssistant(path)
@@ -74,7 +86,11 @@ class HomeAssistantBoundaryTests(unittest.IsolatedAsyncioTestCase):
     async def test_z2m_discovery_debounces_early_and_event_entity_skips_other_devices(self):
         import time
         from unittest.mock import patch
-        from custom_components.switch_manager.models import async_discover_zigbee2mqtt_instances, format_event_entity_state
+
+        from custom_components.switch_manager.models import (
+            async_discover_zigbee2mqtt_instances,
+            format_event_entity_state,
+        )
 
         async def fake_subscribe(hass, topic, callback):
             if topic.startswith("+/bridge"):

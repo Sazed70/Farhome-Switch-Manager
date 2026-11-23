@@ -2,21 +2,29 @@
 from __future__ import annotations
 
 from typing import Any
-import voluptuous as vol
-from homeassistant.helpers import config_validation as cv
 
-from homeassistant.core import HomeAssistant, callback
+import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import event_message
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.script import Script
 
-from .schema import SWITCH_MANAGER_CONFIG_SCHEMA
-from .helpers import _get_blueprint, _get_switch_config
-from .const import DOMAIN, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
-from .models import Blueprint, async_discover_zigbee2mqtt_instances
-from .farhome.config_service import async_read_config, async_read_all_configs, async_save_config, async_set_enabled, async_delete_config, async_duplicate_config
+from .const import CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, DOMAIN
+from .farhome.config_service import (
+    async_delete_config,
+    async_duplicate_config,
+    async_read_all_configs,
+    async_read_config,
+    async_save_config,
+    async_set_enabled,
+)
 from .farhome.websocket import async_reply
+from .helpers import _get_blueprint, _get_switch_config
+from .models import Blueprint, async_discover_zigbee2mqtt_instances
+from .schema import SWITCH_MANAGER_CONFIG_SCHEMA
+
 
 async def async_setup_connections( hass ):
   
@@ -242,7 +250,7 @@ async def async_setup_connections( hass ):
             sequence = cv.SCRIPT_SCHEMA(action_data)
             script_obj = Script(hass, sequence, "Switch Manager Run Action", DOMAIN)
             await script_obj.async_run(context=connection.context(msg))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             connection.send_error(msg["id"], "action_failed", str(err))
             return
         finally:

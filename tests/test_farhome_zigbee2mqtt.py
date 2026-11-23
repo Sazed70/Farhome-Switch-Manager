@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.exceptions import HomeAssistantError
+
 from custom_components.switch_manager.const import DOMAIN
 from custom_components.switch_manager.farhome.zigbee2mqtt import async_definitions
 

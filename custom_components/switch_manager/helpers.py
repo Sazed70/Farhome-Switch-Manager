@@ -4,17 +4,19 @@ import json
 import os
 import pathlib
 import shutil
-from homeassistant.core import HomeAssistant
+
 from annotatedyaml.loader import load_yaml
-from .const import (
-    LOGGER, 
-    DOMAIN, 
-    BLUEPRINTS_FOLDER, 
-    CONF_BLUEPRINTS,
-    CONF_MANAGED_SWITCHES
-)
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.mqtt.models import ReceiveMessage
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+
+from .const import (
+    BLUEPRINTS_FOLDER,
+    CONF_BLUEPRINTS,
+    CONF_MANAGED_SWITCHES,
+    DOMAIN,
+    LOGGER,
+)
 
 COMPONENT_PATH = os.path.dirname(os.path.realpath(__file__))
 

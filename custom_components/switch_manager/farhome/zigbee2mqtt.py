@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-from copy import deepcopy
 import json
 import re
 import time
+from copy import deepcopy
 from urllib.parse import quote, urlsplit
 
 from homeassistant.components.mqtt import async_subscribe

@@ -1,9 +1,9 @@
 """Farhome DTOs and stable revisions, separate from runtime script objects."""
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any, TypedDict
 
 

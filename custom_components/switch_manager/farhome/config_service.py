@@ -1,17 +1,25 @@
 """Coordinated configuration writes shared by Farhome and the original editor."""
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 
 from homeassistant.components import automation
-from homeassistant.helpers import config_validation as cv, device_registry as dr
-from homeassistant.helpers.script import async_validate_actions_config, SCRIPT_MODE_CHOICES
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.script import (
+    SCRIPT_MODE_CHOICES,
+    async_validate_actions_config,
+)
 
-from ..const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, LOGGER
-from ..models import ManagedSwitchConfig, reconcile_buttons_with_blueprint, uses_zigbee2mqtt_action_topic
-from .types import config_snapshot, revision
+from ..const import CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, CONF_STORE, DOMAIN, LOGGER
+from ..models import (
+    ManagedSwitchConfig,
+    reconcile_buttons_with_blueprint,
+    uses_zigbee2mqtt_action_topic,
+)
 from .actions import apply_quick_actions
+from .types import config_snapshot, revision
 
 
 class FarhomeError(ValueError):
@@ -191,7 +199,7 @@ async def _replace_runtime(hass, config_id, data, blueprint):
         disabled = {**data, 'enabled': False}
         try:
             await store.async_write_config(config_id, disabled)
-        except Exception:
+        except Exception:  # noqa: BLE001
             LOGGER.exception("Failed to persist disabled state for switch %s", config_id)
         raise FarhomeError('partial_write', 'Configurazione salvata, ma non avviata. È necessario ricaricare e verificarla.') from err
 

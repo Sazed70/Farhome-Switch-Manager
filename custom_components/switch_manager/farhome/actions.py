@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import re
+
 from homeassistant.components.fan.const import FanEntityFeature
 from homeassistant.components.light.const import LightEntityFeature
 
@@ -24,7 +25,7 @@ def _number(value, minimum=0, maximum=math.inf):
 
 def validate_quick_action(hass, value):
     if not isinstance(value, dict):
-        raise ValueError('invalid_quick_action')
+        raise ValueError('invalid_quick_action')  # noqa: TRY004
     domain, kind = value.get('domain'), value.get('kind')
     entity_id, area_id = value.get('entity_id'), value.get('area_id')
     if not isinstance(domain, str) or domain not in KINDS or not isinstance(kind, str) or kind not in KINDS[domain]:

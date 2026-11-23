@@ -1,19 +1,30 @@
 """Persistent helper edits use HA's registered collection API, never .storage."""
+import asyncio
 import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-import asyncio
 
+from homeassistant.components.input_select import (
+    STORAGE_FIELDS,
+    InputSelectStorageCollection,
+    InputSelectStore,
+)
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.components.input_select import InputSelectStorageCollection, InputSelectStore, STORAGE_FIELDS
-from homeassistant.helpers.collection import IDManager, DictStorageCollectionWebsocket
-from homeassistant.helpers import category_registry as cr, device_registry as dr, entity_registry as er
-from homeassistant.helpers.script import Script, async_validate_actions_config
+from homeassistant.helpers import category_registry as cr
 from homeassistant.helpers import config_validation as cv
-from custom_components.switch_manager.const import DOMAIN, CONF_MANAGED_SWITCHES
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.collection import DictStorageCollectionWebsocket, IDManager
+from homeassistant.helpers.script import Script, async_validate_actions_config
+
+from custom_components.switch_manager.const import CONF_MANAGED_SWITCHES, DOMAIN
+from custom_components.switch_manager.farhome.selector import (
+    async_read_selector,
+    async_update_selector,
+    build_selector_action,
+)
 from custom_components.switch_manager.farhome.store import FarhomeStore
-from custom_components.switch_manager.farhome.selector import async_read_selector, async_update_selector, build_selector_action
 from custom_components.switch_manager.models import ManagedSwitchConfigButtonAction
 from tests.fixtures import MemoryStorage
 
@@ -65,7 +76,9 @@ class SelectorTests(unittest.IsolatedAsyncioTestCase):
         return await async_update_selector(self.hass, 'input_select.renamed', options or ['light.a', 'light.b'], active, initial, revision or current['revision'], ack, config_id='1')
 
     async def test_create_ordered_helper_uses_registry_id_and_retries_without_duplicates(self):
-        from custom_components.switch_manager.farhome.selector import async_create_selector
+        from custom_components.switch_manager.farhome.selector import (
+            async_create_selector,
+        )
 
         await cr.async_load(self.hass, load_empty=True)
         categories = cr.async_get(self.hass)

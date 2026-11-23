@@ -1,12 +1,14 @@
 """Acceptance tests exercise the compiled product components, no live HA."""
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 import json
 import os
 import tempfile
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Thread
-from playwright.sync_api import sync_playwright, expect
+
+from playwright.sync_api import expect, sync_playwright
+
 
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args):

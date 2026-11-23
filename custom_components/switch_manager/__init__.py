@@ -2,26 +2,40 @@
 from __future__ import annotations
 
 import voluptuous as vol
-from .const import (
-    DOMAIN, 
-    CONF_BLUEPRINTS,
-    CONF_SWITCH_CONFIGS,
-    CONF_MANAGED_SWITCHES,
-    CONF_STORE,
-    LOGGER    
-)
-from .store import SwitchManagerStore
-from .helpers import load_blueprints, VERSION, deploy_blueprints, check_blueprints_folder_exists, _get_blueprint, _get_switch_config, _set_switch_config
-from .view import async_setup_view, async_remove_view, async_bind_blueprint_images
-from . import models
-from .schema import BLUEPRINT_MQTT_SCHEMA, BLUEPRINT_EVENT_SCHEMA, SERVICE_SET_VARIABLES_SCHEMA
-from .connections import async_setup_connections
-from .farhome import async_setup_farhome
-from .farhome.websocket import async_setup_websocket as async_setup_farhome_websocket
-from homeassistant.core import HomeAssistant, callback
 from homeassistant.config import format_schema_error
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
+
+from . import models
+from .connections import async_setup_connections
+from .const import (
+    CONF_BLUEPRINTS,
+    CONF_MANAGED_SWITCHES,
+    CONF_STORE,
+    CONF_SWITCH_CONFIGS,
+    DOMAIN,
+    LOGGER,
+)
+from .farhome import async_setup_farhome
+from .farhome.websocket import async_setup_websocket as async_setup_farhome_websocket
+from .helpers import (
+    VERSION,
+    _get_blueprint,
+    _get_switch_config,
+    _set_switch_config,
+    check_blueprints_folder_exists,
+    deploy_blueprints,
+    load_blueprints,
+)
+from .schema import (
+    BLUEPRINT_EVENT_SCHEMA,
+    BLUEPRINT_MQTT_SCHEMA,
+    SERVICE_SET_VARIABLES_SCHEMA,
+)
+from .store import SwitchManagerStore
+from .view import async_bind_blueprint_images, async_remove_view, async_setup_view
+
 
 async def async_setup( hass: HomeAssistant, config: ConfigType ):
     """Set up is called when Home Assistant is loading our component."""

@@ -1,5 +1,9 @@
 import unittest
-from custom_components.switch_manager.farhome.zigbee2mqtt import resolve_image, parse_devices
+
+from custom_components.switch_manager.farhome.zigbee2mqtt import (
+    parse_devices,
+    resolve_image,
+)
 
 
 class ImageTests(unittest.TestCase):

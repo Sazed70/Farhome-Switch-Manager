@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
-from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from ..const import CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, DOMAIN
-from .types import revision, config_snapshot
+from .types import config_snapshot, revision
 from .zigbee2mqtt import action_values, async_definitions, has_actions, resolve_image
-
 
 CLICK_GESTURES = {"single", "double", "hold"}
 # Known matches only. Identical action names on an unknown model are not enough.

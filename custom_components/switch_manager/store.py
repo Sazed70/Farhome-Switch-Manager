@@ -1,10 +1,10 @@
 # Farhome modifications 2026-11-06: persist validated snapshots before replacing runtime data.
 from __future__ import annotations
 
-import attr
 import json
 from copy import deepcopy
 
+import attr
 from homeassistant.helpers.storage import Store
 
 STORAGE_VERSION = 1

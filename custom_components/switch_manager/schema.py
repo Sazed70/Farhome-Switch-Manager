@@ -1,7 +1,8 @@
 import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.script import SCRIPT_MODE_CHOICES, DEFAULT_SCRIPT_MODE
-from .const import LOOP_INTERVAL_DEFAULT, LOOP_INTERVAL_MIN, LOOP_INTERVAL_MAX
+from homeassistant.helpers.script import DEFAULT_SCRIPT_MODE, SCRIPT_MODE_CHOICES
+
+from .const import LOOP_INTERVAL_DEFAULT, LOOP_INTERVAL_MAX, LOOP_INTERVAL_MIN
 
 CONDITION_SCHEMA = vol.Schema({
     vol.Required('key'): cv.string,

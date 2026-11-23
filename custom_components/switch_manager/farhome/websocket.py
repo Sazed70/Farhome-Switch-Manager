@@ -5,9 +5,14 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.helpers import device_registry as dr
 
-from ..const import DOMAIN, CONF_MANAGED_SWITCHES
+from ..const import CONF_MANAGED_SWITCHES, DOMAIN
+from .config_service import (
+    FarhomeError,
+    async_read_config,
+    async_save_config,
+    async_set_enabled,
+)
 from .inventory import async_snapshot
-from .config_service import async_read_config, async_save_config, async_set_enabled, FarhomeError
 from .selector import async_create_selector, async_read_selector, async_update_selector
 
 

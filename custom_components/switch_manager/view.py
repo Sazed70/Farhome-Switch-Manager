@@ -2,19 +2,24 @@
 from hashlib import sha256
 from pathlib import Path
 
+from homeassistant.components.frontend import (
+    async_register_built_in_panel,
+    async_remove_panel,
+)
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.core import HomeAssistant
+
 from .const import (
-    DOMAIN, 
-    CONF_BLUEPRINTS, 
-    CONF_STATIC_PATHS, 
-    BLUEPRINTS_FOLDER, 
-    PANEL_URL, 
-    PANEL_URL_PATH, 
-    LOGGER
+    BLUEPRINTS_FOLDER,
+    CONF_BLUEPRINTS,
+    CONF_STATIC_PATHS,
+    DOMAIN,
+    LOGGER,
+    PANEL_URL,
+    PANEL_URL_PATH,
 )
 from .helpers import VERSION
-from homeassistant.core import HomeAssistant
-from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
-from homeassistant.components.http import StaticPathConfig
+
 
 async def async_setup_view(hass: HomeAssistant):
     bundle_path = hass.config.path("custom_components/switch_manager/assets/switch_manager_panel.js")

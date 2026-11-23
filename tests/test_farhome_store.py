@@ -1,4 +1,5 @@
 import unittest
+
 from custom_components.switch_manager.farhome.store import FarhomeStore
 from tests.fixtures import MemoryStorage
 

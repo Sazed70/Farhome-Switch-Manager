@@ -1,7 +1,9 @@
 import tempfile
 import unittest
-from homeassistant.core import HomeAssistant
+
 from homeassistant.components.fan.const import FanEntityFeature
+from homeassistant.core import HomeAssistant
+
 from custom_components.switch_manager.farhome.actions import validate_quick_action
 
 
@@ -80,7 +82,7 @@ class QuickActionValidationTests(unittest.IsolatedAsyncioTestCase):
             validate_quick_action(self.hass,{'domain':'fan','kind':'increase','entity_id':'fan.air','step':10,'mode':'single'})
 
     def test_area_target_supported_for_light_fan_switch(self):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
         mock_ar = MagicMock()
         mock_ar.async_get_area.side_effect = lambda aid: MagicMock(id=aid) if aid == 'room_a' else None
         with patch('homeassistant.helpers.area_registry.async_get', return_value=mock_ar):

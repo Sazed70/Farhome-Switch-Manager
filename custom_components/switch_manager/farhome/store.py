@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+
 from homeassistant.helpers.storage import Store
 
 from .types import revision
@@ -67,7 +68,7 @@ class FarhomeStore:
         candidate = self.snapshot()
         for namespace, records in patch.items():
             if not isinstance(records, dict):
-                raise ValueError("invalid_metadata_patch")
+                raise ValueError("invalid_metadata_patch")  # noqa: TRY004
             for key, value in records.items():
                 if value is None:
                     candidate[namespace].pop(key, None)

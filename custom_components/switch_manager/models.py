@@ -1,20 +1,34 @@
-import time
-import re
-import json
-import copy
 import asyncio
-from .const import DOMAIN, LOGGER, LOOP_MAX_SECONDS, LOOP_INTERVAL_DEFAULT, ZIGBEE2MQTT_DEFAULT_BASE_TOPIC
-from .helpers import format_mqtt_message, get_val_from_str
-from homeassistant.core import HomeAssistant, Context, callback, Event
-from homeassistant.const import EVENT_STATE_CHANGED, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.helpers import entity_registry as er, device_registry as dr
-from homeassistant.helpers.script import Script, async_validate_actions_config, DEFAULT_SCRIPT_MODE
-from homeassistant.helpers.condition import async_template as template_condition
-from homeassistant.helpers.template import Template
+import copy
+import json
+import re
+import time
+
+import homeassistant.helpers.config_validation as cv
 from homeassistant.components.mqtt.client import async_subscribe as mqtt_subscribe
 from homeassistant.components.mqtt.models import ReceiveMessage
+from homeassistant.const import EVENT_STATE_CHANGED, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.condition import async_template as template_condition
+from homeassistant.helpers.script import (
+    DEFAULT_SCRIPT_MODE,
+    Script,
+    async_validate_actions_config,
+)
+from homeassistant.helpers.template import Template
+
+from .const import (
+    DOMAIN,
+    LOGGER,
+    LOOP_INTERVAL_DEFAULT,
+    LOOP_MAX_SECONDS,
+    ZIGBEE2MQTT_DEFAULT_BASE_TOPIC,
+)
+from .helpers import format_mqtt_message, get_val_from_str
+
 
 def check_conditions( hass: HomeAssistant, conditions, data ) -> bool:
     if not conditions:
@@ -606,7 +620,7 @@ class ManagedSwitchConfigButtonAction:
                 await self.script.async_run( run_variables=data, context=context )
                 try:
                     await asyncio.wait_for( self._loop_stop.wait(), interval )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
         finally:
             self._loop_task = None
@@ -633,7 +647,7 @@ class ManagedSwitchConfigButtonAction:
             return
         try:
             script = await self._make_script( self.sequence )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             LOGGER.error(
                 "Unable to initialize script for switch:%s button:%s action:%s: %s",
                 self.switch_id, self.button_index, self.index, err,
@@ -677,7 +691,7 @@ class ManagedSwitchConfigButtonAction:
                 script = await self._make_script(
                     scale_sequence_fields( self.sequence, self.blueprint.scale_field, factor )
                 )
-            except Exception as err:
+            except Exception as err:  # noqa: BLE001
                 LOGGER.error(f"switch:{self.switch_id} button:{self.button_index} action:{self.index} could not build scaled sequence, running unscaled: {err}")
                 script = self.script
             LOGGER.debug(f"Running sequence (x{factor} scaled) for switch:{self.switch_id} button:{self.button_index} action:{self.index}")
@@ -887,7 +901,7 @@ class ManagedSwitchConfig:
         
     def notify(self, event: str, data):
         for listener in self.listeners:
-            listener( {**data, **{"event": event}} )
+            listener( {**data, "event": event} )
 
     def monitored( self ) -> bool:
         return bool(self.listeners)
@@ -982,9 +996,11 @@ class ManagedSwitchConfig:
         self.enabled = value
 
     def _check_conditions( self, data ) -> bool:
-        if not self.blueprint.is_mqtt:
-            if str(data.get(self.blueprint.identifier_key)) != str(self.identifier):
-                return False
+        if (
+            not self.blueprint.is_mqtt
+            and str(data.get(self.blueprint.identifier_key)) != str(self.identifier)
+        ):
+            return False
         
         self.notify('incoming', { 'data': data })
         return self.blueprint.check_conditions( data )

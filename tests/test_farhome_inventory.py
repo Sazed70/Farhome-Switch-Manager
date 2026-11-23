@@ -1,6 +1,7 @@
 import unittest
 from copy import deepcopy
 from types import SimpleNamespace
+
 from custom_components.switch_manager.farhome.inventory import build_inventory
 from tests.fixtures import registry_fixture, switch_config
 
