@@ -8,7 +8,7 @@ from homeassistant.components import automation
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.script import async_validate_actions_config, SCRIPT_MODE_CHOICES
 
-from ..const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
+from ..const import DOMAIN, CONF_STORE, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, LOGGER
 from ..models import ManagedSwitchConfig, reconcile_buttons_with_blueprint, uses_zigbee2mqtt_action_topic
 from .types import config_snapshot, revision
 from .actions import apply_quick_actions
@@ -50,6 +50,16 @@ async def async_read_config(hass, config_id):
     metadata, _, _ = _objects(hass)
     async with metadata.config_lock:
         return _read(hass, config_id)
+
+
+async def async_read_all_configs(hass):
+    metadata, _, configs = _objects(hass)
+    async with metadata.config_lock:
+        snapshots = {key: _read(hass, key) for key in list(configs)}
+        return {
+            'configs': {key: value['config'] for key, value in snapshots.items()},
+            'revisions': {key: value['revision'] for key, value in snapshots.items()},
+        }
 
 
 def _check_revision(hass, config_id, expected_revision):
@@ -174,15 +184,15 @@ async def _replace_runtime(hass, config_id, data, blueprint):
         # A persisted configuration which cannot start must remain explicitly disabled.
         if candidate is not None:
             candidate.setEnabled(False)
-            candidate.stop()
+            candidate.unload()
         if old is not None:
             old.setEnabled(False)
-            old.stop()
+            old.unload()
         disabled = {**data, 'enabled': False}
         try:
             await store.async_write_config(config_id, disabled)
         except Exception:
-            pass
+            LOGGER.exception("Failed to persist disabled state for switch %s", config_id)
         raise FarhomeError('partial_write', 'Configurazione salvata, ma non avviata. È necessario ricaricare e verificarla.') from err
 
 
@@ -229,8 +239,8 @@ async def _save_locked(hass, config, binding, expected_revision, *, fix_mismatch
 
 
 async def async_save_config(hass, config, metadata, expected_revision, *, fix_mismatch=False, quick_actions=None, selector_actions=None):
-    store, _, _ = _objects(hass)
-    async with store.config_lock:
+    farhome, _, _ = _objects(hass)
+    async with farhome.config_lock:
         return await _save_locked(hass, config, metadata, expected_revision, fix_mismatch=fix_mismatch, quick_actions=quick_actions, selector_actions=selector_actions)
 
 

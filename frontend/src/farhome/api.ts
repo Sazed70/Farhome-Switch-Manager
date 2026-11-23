@@ -9,8 +9,8 @@ export class FarhomeApi {
   deleteConfig(config_id:string,expected_revision:string):Promise<{deleted:string}>{
     return this.hass.callWS({type:'switch_manager/config/delete',config_id,expected_revision});
   }
-  save(config:EditableConfig,metadata:Binding|null|undefined,expected_revision:string|undefined,quick_actions:QuickPatch[]=[],selector_actions:SelectorPatch[]=[]):Promise<ConfigEnvelope>{
-    return this.hass.callWS({type:'switch_manager/farhome/config/save',config:{...config,blueprint:typeof config.blueprint==='string'?config.blueprint:config.blueprint.id},metadata,expected_revision,quick_actions,selector_actions});
+  save(config:EditableConfig,metadata:Binding|null|undefined,expected_revision:string|undefined,quick_actions:QuickPatch[]=[],selector_actions:SelectorPatch[]=[],fix_mismatch=false):Promise<ConfigEnvelope>{
+    return this.hass.callWS({type:'switch_manager/farhome/config/save',config:{...config,blueprint:typeof config.blueprint==='string'?config.blueprint:config.blueprint.id},metadata,expected_revision,quick_actions,selector_actions,...(fix_mismatch?{fix_mismatch:true}:{})});
   }
   setEnabled(config_id:string,enabled:boolean,expected_revision:string,manual_confirmation:boolean):Promise<ConfigEnvelope>{
     return this.hass.callWS({type:'switch_manager/farhome/config/enabled',config_id,enabled,expected_revision,manual_confirmation});

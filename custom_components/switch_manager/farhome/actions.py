@@ -81,7 +81,11 @@ def validate_quick_action(hass, value):
                 raise ValueError('unsupported_transition')
             if 'color_temp_kelvin' in value:
                 kelvin = value['color_temp_kelvin']
-                if 'color_temp' not in color_modes or not _number(kelvin, 1) or not entity.attributes.get('min_color_temp_kelvin', 0) <= kelvin <= entity.attributes.get('max_color_temp_kelvin', math.inf):
+                min_k = entity.attributes.get('min_color_temp_kelvin')
+                max_k = entity.attributes.get('max_color_temp_kelvin')
+                min_k = min_k if _number(min_k, 0) else 0
+                max_k = max_k if _number(max_k, 0) else math.inf
+                if 'color_temp' not in color_modes or not _number(kelvin, 1) or not min_k <= kelvin <= max_k:
                     raise ValueError('unsupported_color_temperature')
             if 'rgb_color' in value and not any(mode in color_modes for mode in COLOR_MODES):
                 raise ValueError('unsupported_color')

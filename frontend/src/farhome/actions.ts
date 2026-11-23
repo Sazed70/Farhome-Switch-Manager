@@ -152,6 +152,10 @@ export function supportsColorTemperature(entity: EntityState): boolean {
   return Array.isArray(modes)&&modes.includes('color_temp');
 }
 
+export function supportsTransition(entity: EntityState): boolean {
+  return Boolean(Number(entity.attributes.supported_features)&32);
+}
+
 export function lightTemperatureRange(entity: EntityState): [number,number] {
   const {min_color_temp_kelvin:min,max_color_temp_kelvin:max}=entity.attributes;
   return number(min,1)&&number(max,min)?[min,max]:[2000,6535];

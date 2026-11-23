@@ -1,6 +1,6 @@
 # Farhome: pannello Pulsanti per Home Assistant
 
-Data: 6 novembre 2026. Stato: progetto approvato dall'utente («perfetto») dopo l'aggiunta delle miniature; implementazione e installazione non ancora eseguite.
+Data: 6 novembre 2026. Stato: progetto approvato dopo l'aggiunta delle miniature; implementazione e installazione non ancora eseguite.
 Repository di destinazione: Sazed70/Farhome-Switch-Manager, ramo farhome.
 Base esaminata: 8646d78f7485dbe6728634d0ef59b3edb597d750.
 
@@ -77,7 +77,7 @@ Leggere la configurazione originale e controllarne la revisione prima dell'aggio
 
 Queste sono scelte tecniche proposte, non ulteriori preferenze attribuite all'utente.
 
-Estendere il pannello Lit esistente e il suo routing, con vista per stanza e dettaglio dispositivo; mantenere accessibile l'editor upstream durante lo sviluppo. Usare componenti, temi chiaro/scuro, tipografia e linguaggio visivo HA: non trasferire automaticamente il tema Grafite della Homepage. Italiano per i nuovi testi, predisposti a localizzazione senza cambiare le chiavi ereditate.
+Estendere il pannello Lit esistente e il suo routing, con vista per stanza e dettaglio dispositivo; mantenere accessibile l'editor upstream durante lo sviluppo. Usare componenti, temi chiaro/scuro, tipografia e linguaggio visivo HA. Italiano per i nuovi testi, predisposti a localizzazione senza cambiare le chiavi ereditate.
 
 Inventario e associazioni risolti dal backend dell'integrazione con API HA e dati dell'integrazione. Non usare credenziali salvate nel frontend. WebSocket amministrativo restituisce DTO minimi e separa registry device_id, config_id, blueprint_id e identificatore eventi; non sono intercambiabili. Risolvere automaticamente soltanto collegamenti deterministici tramite i registri (per esempio event entity collegata a un dispositivo); per MQTT o identificatori ambigui conferma manuale del dispositivo e del blueprint. La scelta manuale non modifica registro o stanza HA.
 
@@ -109,7 +109,7 @@ Nomi interni dei DTO/endpoint, suddivisione componenti e formato della revisione
 
 ## Verifica della proposta e fonti
 
-Revisione indipendente di costruibilità completata sul documento: individuata e risolta l'ambiguità sulla persistenza delle opzioni input_select. Dopo la precisazione su helper UI e YAML, nessuna questione importante rimasta secondo il revisore. Anteprima con miniature approvata dall'utente («perfetto») il 6 novembre 2026; approvazione del progetto distinta da implementazione, collaudo e installazione in produzione.
+Revisione indipendente di costruibilità completata sul documento: individuata e risolta l'ambiguità sulla persistenza delle opzioni input_select. Dopo la precisazione su helper UI e YAML, nessuna questione importante rimasta secondo il revisore. Anteprima con miniature approvata il 6 novembre 2026; approvazione del progetto distinta da implementazione, collaudo e installazione in produzione.
 
 Fonti tecniche lette, senza modificare Home Assistant:
 

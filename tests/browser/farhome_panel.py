@@ -4,6 +4,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import json
 import os
+import tempfile
 from threading import Thread
 from playwright.sync_api import sync_playwright, expect
 
@@ -242,7 +243,7 @@ try:
             for width in (1440, 390, 320):
                 page.set_viewport_size({'width': width, 'height': 1000})
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), (theme, width)
-                output = root / '.superpowers/sdd/2026-11-06-farhome-pulsanti'
+                output = Path(os.environ.get('FARHOME_SCREENSHOT_DIR') or tempfile.gettempdir()) / 'farhome-switch-manager-screenshots'
                 output.mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(output / f'product-{theme}-{width}.png'), full_page=True)
         page.evaluate('window.failRead=true;mount()')
@@ -442,6 +443,21 @@ try:
         expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
         saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).quick_actions[0].value")
         assert saved['entity_id'] == 'light.extra' and 'rgb_color' not in saved
+        expect(page.get_by_label('Transizione (s)', exact=True)).to_be_visible()
+        page.get_by_label('Transizione (s)', exact=True).fill('0.4')
+        page.get_by_label('Destinatario', exact=True).select_option('light.ceiling')
+        expect(page.get_by_label('Transizione (s)', exact=True)).to_have_count(0)
+        page.get_by_role('button', name='Salva gesti', exact=True).click()
+        expect(page.get_by_text('Salvato', exact=True)).to_be_visible()
+        saved = page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).quick_actions[0].value")
+        assert saved['entity_id'] == 'light.ceiling' and 'transition' not in saved
+        page.evaluate("configs['1'].is_mismatch = true")
+        page.evaluate("mount('/rooms/studio/device/knob')")
+        align_btn = page.get_by_role('button', name='Allinea al blueprint', exact=True)
+        expect(align_btn).to_be_visible()
+        align_btn.click()
+        expect(align_btn).to_have_count(0)
+        assert page.evaluate("calls.filter(x=>x.type.endsWith('/config/save')).at(-1).fix_mismatch === true")
         assert not page.evaluate("calls.some(x=>x.type==='call_service')")
         print(json.dumps({'product_components': 'passed', 'themes': 2, 'widths': [1440, 390, 320], 'load_actuations': 0}))
         browser.close()

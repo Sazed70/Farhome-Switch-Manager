@@ -1,8 +1,6 @@
 # Farhome modifications 2026-11-06: persist validated snapshots before replacing runtime data.
 from __future__ import annotations
 
-from .const import LOGGER
-from .models import ManagedSwitchConfig
 import attr
 import json
 from copy import deepcopy
@@ -11,28 +9,6 @@ from homeassistant.helpers.storage import Store
 
 STORAGE_VERSION = 1
 STORAGE_ID = "switch_manager"
-
-
-@attr.s
-class SwitchManagerManagedSwitchData:
-    name = attr.ib(type=str, default='')
-    enabled = attr.ib(type=bool, default=True)
-    blueprint = attr.ib(type=str, default=None)
-    identifier = attr.ib(type=str, default=None)
-    variables = attr.ib(type=dict, default=None)
-    rotate = attr.ib(type=int, default=0)
-    buttons = attr.ib(type=list, default=[])
-
-    def set_from_managed_switch_config( self, config: ManagedSwitchConfig ):
-        self.__dict__.update(config.as_dict())      
-        self.blueprint = config.blueprint.id
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def asdict(self):
-        return attr.asdict(self)
 
 
 @attr.s
@@ -83,10 +59,6 @@ class SwitchManagerStore:
         self.data.version = str(version)
         await self.updated()
 
-    async def delete_managed_switch(self, _id: str):
-        del self.data.managed_switches[_id]
-        await self.updated()
-
     def asdict(self):
         return self.data.asdict()
 
@@ -119,11 +91,4 @@ class SwitchManagerStore:
         candidate['managed_switches'].pop(str(config_id), None)
         await self.store.async_save(candidate)
         self.data = SwitchManagerStoreData.from_dict(candidate)
-            
-    async def set_managed_switch( self, config_data: ManagedSwitchConfig ):        
-        config = self.data.managed_switches.get(int(config_data.id), SwitchManagerManagedSwitchData())
-        config.set_from_managed_switch_config( config_data )
-
-        self.data.managed_switches[config_data.id] = config
-        await self.updated()
         

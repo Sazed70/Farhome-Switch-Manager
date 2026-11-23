@@ -1,5 +1,9 @@
 """Helpers for switch_manager integration."""
-import json, pathlib, os, shutil, enum
+import enum
+import json
+import os
+import pathlib
+import shutil
 from homeassistant.core import HomeAssistant
 from annotatedyaml.loader import load_yaml
 from .const import (
@@ -21,27 +25,18 @@ VERSION = MANIFEST['version']
 
 async def check_blueprints_folder_exists( hass ):
     dest_folder = pathlib.Path(hass.config.path(BLUEPRINTS_FOLDER, DOMAIN))
-    return os.path.exists( dest_folder )
+    return await hass.async_add_executor_job(os.path.exists, dest_folder)
 
 async def deploy_blueprints( hass ):
     dest_folder = pathlib.Path(hass.config.path(BLUEPRINTS_FOLDER, DOMAIN))
-    if not os.path.exists( dest_folder ):
-        os.makedirs( dest_folder )
-    
     component_blueprints_path = os.path.join( COMPONENT_PATH, 'blueprints' )
-    files = await hass.loop.run_in_executor(
-            None,
-            os.listdir,
-            component_blueprints_path
-        )
 
     def doFiles():
-        for file in files:
-            if os.path.isfile( os.path.join( component_blueprints_path, file )):
-                shutil.copy( 
-                    os.path.join( component_blueprints_path, file ),
-                    dest_folder
-                )
+        os.makedirs(dest_folder, exist_ok=True)
+        for file in os.listdir(component_blueprints_path):
+            src = os.path.join(component_blueprints_path, file)
+            if os.path.isfile(src):
+                shutil.copy(src, dest_folder)
 
     await hass.async_add_executor_job(doFiles)
 
@@ -86,7 +81,7 @@ async def load_blueprints( hass ):
 def format_mqtt_message( message: ReceiveMessage):
     try:
         data = json.loads(message.payload)
-    except ValueError as e:
+    except ValueError:
         data = message.payload
         
     # Json.loads will parse int payloads so we make sure those are converted to payloads
@@ -112,7 +107,7 @@ def get_val_from_str(_string, _dict):
                     v = v[index]
                     continue
                 return None
-            if not key in v:
+            if key not in v:
                 return None
             if hasattr(v[key], 'as_dict'):
                 v = v[key].as_dict()
@@ -129,7 +124,7 @@ def _get_blueprint( hass: HomeAssistant, id: str ):
 
 async def _set_switch_config( hass: HomeAssistant, config ):
     hass.data[DOMAIN][CONF_MANAGED_SWITCHES][config.id] = config
-    await config.start();
+    await config.start()
 
 def _get_switch_config( hass: HomeAssistant, _id: str ):
     return hass.data[DOMAIN][CONF_MANAGED_SWITCHES].get(_id)

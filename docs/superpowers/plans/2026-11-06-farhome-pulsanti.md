@@ -1,7 +1,5 @@
 # Farhome Pulsanti Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Realizzare nel fork il pannello approvato per configurare pulsanti e manopole per stanza, con miniature, editor gesti multidominio e selettore luci, senza installare o migrare la produzione.
 
 **Architecture:** Estendere il frontend Lit e riusare motore eventi/script ed editor azioni upstream. Un servizio backend amministrativo fornisce inventario, associazioni e salvataggi con controllo di revisione; metadati Farhome in Store separato, sequenze eseguibili nel formato upstream. Aggiornamenti degli helper persistenti separati dal salvataggio dei gesti.
@@ -19,7 +17,7 @@
 - Nessuna semplificazione distruttiva, troncamento a prima azione o trasformazione automatica.
 - Cicli misti fra luci e ventilatori esclusi dal perimetro concordato.
 - Conservare event listener e motore script upstream; non creare una seconda automazione esecutiva per ogni gesto.
-- Usare componenti, temi chiaro/scuro, tipografia e linguaggio visivo HA: non trasferire automaticamente il tema Grafite della Homepage.
+- Usare componenti, temi chiaro/scuro, tipografia e linguaggio visivo HA.
 - Catalogo pubblico e test con dati sintetici; mai esportazioni, identificativi dell'abitazione o segreti nei commit.
 - Nessuna foto di terzi copiata/cache distribuita senza verifica dei diritti. Immagini mancanti non impediscono l'uso.
 
@@ -105,7 +103,7 @@ Modifiche limitate all'integrazione: `__init__.py`, `connections.py`, `view.py`,
 - [ ] Implementare navigazione per area e dettaglio affiancato desktop/pagina mobile, gruppi produttore-modello-nome con localeCompare. Stato iniziale distinto da errore e vuoto. Scelta device/blueprint/identificatore esplicita per dispositivi non associati; stato compatibilità separato dalla gestione. Configurazioni multiple richiedono scelta esplicita, non primo risultato automatico.
 - [ ] Implementare thumbnail contain56/80px con alt decorativo accanto ai nomi, credito per origine, riserva su error. Usare colori/typography HA. L'editor mostra soltanto tasti/gesti del blueprint, usa parser rapido Task3 o editor HA esistente, con conferma esplicita prima di sostituire una sequenza avanzata. Non mettere nell'editor funzioni tecniche non utili all'utente.
 - [ ] Implementare bozza per dispositivo, cambio gesto senza perdita, navigazione con salva/scarta/resta, salva disabilitato in corso, errori con bozza conservata. Entrambi gli editor inviano revisioni Task2; mantenerne la risposta aggiornata dopo ogni modifica. Esterni in sola consultazione, preparazione crea bozza disabilitata. Nessun pulsante di esecuzione dei carichi nel nuovo pannello.
-- [ ] Verificare con `python tests/browser/farhome_panel.py` e build/typecheck; usare Chrome Beta sul PC Windows se disponibile, Chromium in CI. Tutti i test nuovi devono passare; screenshot desktop1440 e mobile390/320 con tema chiaro e scuro.
+- [ ] Verificare con `python tests/browser/farhome_panel.py` e build/typecheck; usare Chrome Beta se disponibile, Chromium in CI. Tutti i test nuovi devono passare; screenshot desktop1440 e mobile390/320 con tema chiaro e scuro.
 - [ ] Commit: `feat: add Farhome rooms and gesture editor`.
 
 ## Task 6: editor del selettore nel pannello
@@ -128,7 +126,7 @@ Modifiche limitate all'integrazione: `__init__.py`, `connections.py`, `view.py`,
 - [ ] Controllare che browser non emetta servizi light/fan/switch durante editing, che thumbnail indisponibili non nascondano controller e che tastiera possa scegliere gesti, riordinare e annullare. Rivedere screenshot alle dimensioni previste e retestare soltanto le correzioni applicate.
 - [ ] Revisore indipendente sul diff completo e sulle prove; correggere problemi materiali, verificare regressioni e rileggere stato remoto prima di pubblicare. Verificare LICENSE/attribuzioni, dati sintetici e assenza segreti, lockfile/bundle coerenti, nessun cambiamento estraneo.
 - [ ] Documentare capacità effettivamente implementate e copertura dei modelli, limiti delle dipendenze indirette e delle immagini personalizzate, istruzioni ambiente test. Separare chiaramente pronto in test da compatibilità hardware validata. Piano migrazione reale futuro: un controller, backup, copia config, verifica eventi, passaggio manuale e ritorno; non eseguirlo.
-- [ ] Pubblicare sul fork un ramo di sviluppo con i commit verificati; mantenere `master` upstream. Aggiornare stato documentale e registro Homelab locale senza sincronizzare quel repository. Nessuna release applicativa o installazione implicita.
+- [ ] Pubblicare sul fork un ramo di sviluppo con i commit verificati; mantenere `master` upstream. Aggiornare lo stato documentale. Nessuna release applicativa o installazione implicita.
 - [ ] Commit: `docs: document Farhome validation and staged migration`.
 
 ## Controllo del piano
@@ -137,4 +135,4 @@ Copertura: inventario/stanze/associazioni/miniature Task1+5; metadati e concorre
 
 ## Stato di esecuzione — 7 novembre 2026
 
-Il lavoro è stato eseguito direttamente in chat su un checkout isolato del ramo `work/farhome-panel`. La revisione indipendente e le regressioni finali coprono conservazione dei parametri, protezione della bozza durante il salvataggio e aggiornamento della luce attiva. Il collaudo fisico e la migrazione restano attività future. Le prove e i limiti sono descritti nella [guida di verifica](../../farhome/testing-and-migration.md).
+Il lavoro è stato eseguito su un checkout isolato del ramo `work/farhome-panel`. La revisione indipendente e le regressioni finali coprono conservazione dei parametri, protezione della bozza durante il salvataggio e aggiornamento della luce attiva. Il collaudo fisico e la migrazione restano attività future. Le prove e i limiti sono descritti nella [guida di verifica](../../farhome/testing-and-migration.md).

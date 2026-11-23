@@ -9,7 +9,7 @@ from .const import (
     BLUEPRINTS_FOLDER, 
     PANEL_URL, 
     PANEL_URL_PATH, 
-    NAME
+    LOGGER
 )
 from .helpers import VERSION
 from homeassistant.core import HomeAssistant
@@ -18,7 +18,11 @@ from homeassistant.components.http import StaticPathConfig
 
 async def async_setup_view(hass: HomeAssistant):
     bundle_path = hass.config.path("custom_components/switch_manager/assets/switch_manager_panel.js")
-    bundle_revision = await hass.async_add_executor_job(lambda: sha256(Path(bundle_path).read_bytes()).hexdigest()[:16])
+    try:
+        bundle_revision = await hass.async_add_executor_job(lambda: sha256(Path(bundle_path).read_bytes()).hexdigest()[:16])
+    except OSError:
+        LOGGER.warning("Unable to hash panel bundle %s; falling back to version", bundle_path)
+        bundle_revision = VERSION
     await _async_register_static_paths(hass, [
         StaticPathConfig(
             PANEL_URL, 

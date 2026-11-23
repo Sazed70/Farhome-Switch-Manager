@@ -127,7 +127,9 @@ def build_inventory(areas, devices, entities, configs, metadata, definitions, *,
                 candidate = entity_devices.get(identifier)
                 candidates = [candidate] if candidate in devices_by_id else []
             elif blueprint.get("is_zigbee2mqtt"):
-                candidates = [device_id for device_id, items in matches.items() if any(identifier == f"{_device_topic(item)}/action" for item in items)]
+                topic_format = blueprint.get("mqtt_topic_format") or ""
+                suffix = topic_format.partition("/+")[2] if "/+" in topic_format else "/action"
+                candidates = [device_id for device_id, items in matches.items() if any(identifier == f"{_device_topic(item)}{suffix}" for item in items)]
         if len(candidates) == 1:
             bound[candidates[0]].append(config_id)
         else:

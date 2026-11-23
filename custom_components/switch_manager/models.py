@@ -40,7 +40,7 @@ EVENT_TYPE_EVENT_ENTITY = 'event_entity'
 def _is_event_entity_state_change( data ) -> bool:
     return str(data.get('entity_id', '')).startswith(f"{EVENT_ENTITY_DOMAIN}.")
 
-def format_event_entity_state( hass: HomeAssistant, event: Event ) -> dict | None:
+def format_event_entity_state( hass: HomeAssistant, event: Event, *, expected_device_id: str | None = None ) -> dict | None:
     """Turn a state_changed event of an `event.*` entity into switch data.
 
     Matter (and other integrations such as Hue or Zigbee2MQTT) do not fire bus
@@ -61,6 +61,8 @@ def format_event_entity_state( hass: HomeAssistant, event: Event ) -> dict | Non
     entity_registry = er.async_get(hass)
     entry = entity_registry.async_get(new_state.entity_id)
     device_id = entry.device_id if entry else None
+    if expected_device_id is not None and device_id != expected_device_id:
+        return None
 
     # Matter remotes expose one event entity per button. Their unique ids carry the
     # endpoint number, so ordering the devices event entities by endpoint (falling
@@ -79,7 +81,6 @@ def format_event_entity_state( hass: HomeAssistant, event: Event ) -> dict | Non
         )
         entity_index = next((i for i, e in enumerate(siblings) if e.entity_id == new_state.entity_id), 0)
 
-    event_type = new_state.attributes.get('event_type')
     data = { k: v for k, v in new_state.attributes.items() if k != 'event_types' }
     data.update({
         'entity_id': new_state.entity_id,
@@ -192,7 +193,7 @@ def get_device_name( hass: HomeAssistant, device_id ) -> str | None:
         return None
     return device.name_by_user or device.name
 
-async def async_discover_zigbee2mqtt_instances( hass: HomeAssistant, timeout: float = 1.5 ) -> list[str]:
+async def async_discover_zigbee2mqtt_instances( hass: HomeAssistant, timeout: float = 1.5, quiet: float = 0.2 ) -> list[str]:
     """Return the base topics of all Zigbee2MQTT instances on the broker.
 
     Every Zigbee2MQTT instance publishes a retained '<base_topic>/bridge/state'
@@ -202,12 +203,16 @@ async def async_discover_zigbee2mqtt_instances( hass: HomeAssistant, timeout: fl
     """
     suffix = '/bridge/state'
     found: set[str] = set()
+    activity = asyncio.Event()
 
     @callback
     def _handle( message: ReceiveMessage ):
         topic = message.topic
         if topic.endswith(suffix):
-            found.add( topic[:-len(suffix)] )
+            base = topic[:-len(suffix)]
+            if base not in found:
+                found.add(base)
+                activity.set()
 
     listeners = []
     try:
@@ -218,7 +223,17 @@ async def async_discover_zigbee2mqtt_instances( hass: HomeAssistant, timeout: fl
         return []
 
     try:
-        await asyncio.sleep(timeout)
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            activity.clear()
+            wait_for = min(remaining, quiet) if found else remaining
+            try:
+                await asyncio.wait_for(activity.wait(), wait_for)
+            except TimeoutError:
+                break
     finally:
         for listener in listeners:
             listener()
@@ -260,7 +275,7 @@ def action_from_zigbee2mqtt_state( message: ReceiveMessage ):
         return None
     return action
 
-async def create_event_listeners( hass: HomeAssistant, blueprint, mqtt_topic, _callback ):
+async def create_event_listeners( hass: HomeAssistant, blueprint, mqtt_topic, _callback, *, identifier: str | None = None ):
     action_topics = blueprint.is_mqtt and uses_zigbee2mqtt_action_topic( blueprint )
     # (topic, payload) -> (source, monotonic time) of the last press, to drop the
     # copy that arrives on the other topic within the duplicate window.
@@ -297,16 +312,25 @@ async def create_event_listeners( hass: HomeAssistant, blueprint, mqtt_topic, _c
     def _handleEvent( event ):
         _callback( event.data.copy(), event.context )
 
+    expected_device_id = identifier if (identifier and blueprint.identifier_key == 'device_id') else None
+
     @callback
     def _handleEntityEvent( event: Event ):
-        data = format_event_entity_state( hass, event )
+        data = format_event_entity_state( hass, event, expected_device_id=expected_device_id )
         if data is not None:
             _callback( data, event.context )
 
     listeners = []
     if blueprint.is_event_entity:
+        if identifier and blueprint.identifier_key == 'entity_id':
+            @callback
+            def _entity_event_filter( data ) -> bool:
+                return _is_event_entity_state_change( data ) and data.get('entity_id') == identifier
+            event_filter = _entity_event_filter
+        else:
+            event_filter = _is_event_entity_state_change
         listeners.append( hass.bus.async_listen(
-            EVENT_STATE_CHANGED, _handleEntityEvent, event_filter=_is_event_entity_state_change
+            EVENT_STATE_CHANGED, _handleEntityEvent, event_filter=event_filter
         ) )
     elif blueprint.is_mqtt:
         try:
@@ -320,7 +344,7 @@ async def create_event_listeners( hass: HomeAssistant, blueprint, mqtt_topic, _c
             if blueprint.mqtt_sub_topics:
                 listeners.append( await mqtt_subscribe(hass, f"{mqtt_topic}/#", _handleMQTT) )
         except HomeAssistantError:
-            LOGGER.error(f"Unable to handle switch as MQTT is not loaded")
+            LOGGER.error("Unable to handle switch as MQTT is not loaded")
     else:
         listeners.append( hass.bus.async_listen(blueprint.event_type, _handleEvent) )
     return listeners
@@ -447,7 +471,7 @@ class BlueprintButton:
         self.width = config.get('width')
         self.height = config.get('height')
         self.conditions = convert_conditions( hass, config.get('conditions', []) )
-        self.index = index;
+        self.index = index
 
         self.actions = []
         for i in range(len(config.get('actions'))):
@@ -553,7 +577,7 @@ class ManagedSwitchConfigButtonAction:
         self._loop_stop = asyncio.Event()
         self._loop_task: asyncio.Task = None
         self._loop_deadline = 0.0
-        hass.async_create_task( self.init_script() )
+        self._init_task: asyncio.Task | None = hass.async_create_task( self.init_script() ) if self.active else None
 
     @property
     def loops( self ) -> bool:
@@ -605,8 +629,21 @@ class ManagedSwitchConfigButtonAction:
             )
 
     async def init_script( self ):
-        if self.active:
-            self.script = await self._make_script( self.sequence )
+        if not self.active or self.script is not None:
+            return
+        try:
+            script = await self._make_script( self.sequence )
+        except Exception as err:
+            LOGGER.error(
+                "Unable to initialize script for switch:%s button:%s action:%s: %s",
+                self.switch_id, self.button_index, self.index, err,
+            )
+            return
+        if not self.active:
+            if hasattr( script, 'async_unload' ):
+                await script.async_unload()
+            return
+        self.script = script
 
     def scale_factor( self, data ) -> int:
         """How often this action should apply for the incoming event (1 = normal)."""
@@ -864,7 +901,7 @@ class ManagedSwitchConfig:
         def _processIncoming( data, context ):
 
             data.update({'variables': self.variables, 'switch_id': self.id, 'button_last_state': self.button_last_state.copy(), 'timestamp': time.time() })
-            if not self.enabled or not self._check_conditons( data ):
+            if not self.enabled or not self._check_conditions( data ):
                 return
 
             button_index = -1
@@ -889,7 +926,16 @@ class ManagedSwitchConfig:
                     }
                     self.notify('action_triggered', { 'button': button_index, 'action': action_index, 'data': data })
 
-        self._event_listeners = await create_event_listeners( self._hass, self.blueprint, self.identifier, _processIncoming )
+        pending = [
+            action._init_task
+            for button in self.buttons
+            for action in button.actions
+            if action._init_task is not None and not action._init_task.done()
+        ]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        self._event_listeners = await create_event_listeners( self._hass, self.blueprint, self.identifier, _processIncoming, identifier=self.identifier )
 
     def stop(self):
         # Restart-safe teardown: cancel in-flight runs but keep Script objects reusable
@@ -921,7 +967,10 @@ class ManagedSwitchConfig:
     def unload_scripts( self ):
         for button in self.buttons:
             for action in button.actions:
+                action.active = False
                 action.stop_loop()
+                if action._init_task is not None and not action._init_task.done():
+                    action._init_task.cancel()
                 if action.script:
                     # Script.async_unload() only exists from HA 2026.5 onwards; on older
                     # cores dropping the reference is all the teardown there is.
@@ -932,7 +981,7 @@ class ManagedSwitchConfig:
     def setEnabled( self, value: bool ):
         self.enabled = value
 
-    def _check_conditons( self, data ) -> bool:
+    def _check_conditions( self, data ) -> bool:
         if not self.blueprint.is_mqtt:
             if str(data.get(self.blueprint.identifier_key)) != str(self.identifier):
                 return False

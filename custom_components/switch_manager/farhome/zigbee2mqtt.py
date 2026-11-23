@@ -2,18 +2,22 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import json
 import re
+import time
 from urllib.parse import quote, urlsplit
 
 from homeassistant.components.mqtt import async_subscribe
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
+from ..const import DOMAIN
 from ..models import async_discover_zigbee2mqtt_instances
 
 MAX_BYTES = 2_000_000
 MAX_DEVICES = 5000
+CACHE_TTL = 5.0
 
 
 def parse_devices(payload, base_topic):
@@ -76,6 +80,12 @@ def has_actions(definition):
 
 async def async_definitions(hass, timeout=1.5):
     """Subscribe only to retained bridge metadata; never emit MQTT commands."""
+    hass_data = getattr(hass, "data", None)
+    domain_data = hass_data.get(DOMAIN) if isinstance(hass_data, dict) else None
+    if domain_data is not None:
+        cached = domain_data.get("farhome_z2m_cache")
+        if cached and time.monotonic() - cached[0] < CACHE_TTL:
+            return deepcopy(cached[1]), []
     warnings = []
     if "mqtt" not in hass.config.components:
         return [], ["mqtt_unavailable"]
@@ -107,4 +117,7 @@ async def async_definitions(hass, timeout=1.5):
     finally:
         for unsubscribe in unsubscribers:
             unsubscribe()
-    return [device for group in received.values() for device in group], warnings
+    devices = [device for group in received.values() for device in group]
+    if domain_data is not None and not warnings:
+        domain_data["farhome_z2m_cache"] = (time.monotonic(), deepcopy(devices))
+    return devices, warnings

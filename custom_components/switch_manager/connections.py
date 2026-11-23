@@ -12,10 +12,10 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.script import Script
 
 from .schema import SWITCH_MANAGER_CONFIG_SCHEMA
-from .helpers import _get_blueprint, _get_switch_config, _remove_switch_config, _set_switch_config
-from .const import DOMAIN, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES, CONF_STORE
-from .models import ManagedSwitchConfig, reconcile_buttons_with_blueprint, async_discover_zigbee2mqtt_instances
-from .farhome.config_service import async_read_config, async_save_config, async_set_enabled, async_delete_config, async_duplicate_config
+from .helpers import _get_blueprint, _get_switch_config
+from .const import DOMAIN, CONF_BLUEPRINTS, CONF_MANAGED_SWITCHES
+from .models import Blueprint, async_discover_zigbee2mqtt_instances
+from .farhome.config_service import async_read_config, async_read_all_configs, async_save_config, async_set_enabled, async_delete_config, async_duplicate_config
 from .farhome.websocket import async_reply
 
 async def async_setup_connections( hass ):
@@ -40,7 +40,7 @@ async def async_setup_connections( hass ):
     @websocket_api.require_admin
     @websocket_api.websocket_command({
         vol.Required("type"): "switch_manager/blueprints/auto_discovery", 
-        vol.Optional("blueprint_id"): cv.string,
+        vol.Required("blueprint_id"): cv.string,
         # Zigbee2MQTT base topics to listen on instead of the blueprint default
         vol.Optional("base_topics"): [cv.string]
     })
@@ -51,12 +51,17 @@ async def async_setup_connections( hass ):
         msg: dict[str, Any],
     ) -> None:
         blueprint = _get_blueprint(hass, msg['blueprint_id'])
+        if not isinstance(blueprint, Blueprint):
+            connection.send_error(msg["id"], "not_found", f"Blueprint {msg['blueprint_id']} not found")
+            return
+
         @callback
         def send( data ):
             connection.send_message(event_message(msg["id"], data))
 
         discovery_listener = await blueprint.start_discovery(send, msg.get('base_topics'))
         if not discovery_listener:
+            connection.send_error(msg["id"], "discovery_unavailable", "Unable to start blueprint auto discovery")
             return
 
         @callback
@@ -94,8 +99,7 @@ async def async_setup_connections( hass ):
         if msg.get('config_id'):
             await async_reply(connection, msg, async_read_config(hass, msg['config_id']))
         else:
-            snapshots = {key: await async_read_config(hass, key) for key in list(hass.data[DOMAIN][CONF_MANAGED_SWITCHES])}
-            connection.send_result(msg['id'], {'configs': {key: value['config'] for key, value in snapshots.items()}, 'revisions': {key: value['revision'] for key, value in snapshots.items()}})
+            await async_reply(connection, msg, async_read_all_configs(hass))
 
     @websocket_api.require_admin
     @websocket_api.websocket_command({
@@ -210,8 +214,11 @@ async def async_setup_connections( hass ):
         msg: dict[str, Any],
     ) -> None:
         if 'skip_config_id' not in msg:
-            msg['skip_config_id'] = '';
-        data = [s for s in hass.data[DOMAIN][CONF_MANAGED_SWITCHES].values() if s.blueprint.id == msg['blueprint_id'] and s.id != msg['skip_config_id']];
+            msg['skip_config_id'] = ''
+        data = [
+            s for s in hass.data[DOMAIN][CONF_MANAGED_SWITCHES].values()
+            if s.valid_blueprint and s.blueprint.id == msg['blueprint_id'] and s.id != msg['skip_config_id']
+        ]
 
         connection.send_result( msg['id'], {
             "switches": data
@@ -230,13 +237,17 @@ async def async_setup_connections( hass ):
     ) -> None:
         action_data = dict(msg["action"])
         action_data.pop("metadata", None)
-        sequence = cv.SCRIPT_SCHEMA(action_data)
-        script_obj = Script(hass, sequence, "Switch Manager Run Action", DOMAIN)
+        script_obj = None
         try:
+            sequence = cv.SCRIPT_SCHEMA(action_data)
+            script_obj = Script(hass, sequence, "Switch Manager Run Action", DOMAIN)
             await script_obj.async_run(context=connection.context(msg))
         except Exception as err:
             connection.send_error(msg["id"], "action_failed", str(err))
             return
+        finally:
+            if script_obj is not None and hasattr(script_obj, "async_unload"):
+                await script_obj.async_unload()
         connection.send_result(msg["id"])
 
     websocket_api.async_register_command(hass, websocket_run_action)

@@ -121,3 +121,10 @@ class InventoryTests(unittest.TestCase):
         self.assertIsNone(suggestion([item, {**item, "base_topic": "other"}]))
         item["definition"]["exposes"][0]["values"] = ["single"]
         self.assertIsNone(suggestion([item]))
+
+    def test_command_mode_zigbee2mqtt_config_auto_associates(self):
+        command_config = switch_config("2", identifier="z2m/desk")
+        command_config["blueprint"]["mqtt_topic_format"] = "zigbee2mqtt/+"
+        result = self.snapshot(configs={"2": command_config})
+        self.assertEqual(result["unassociated_configs"], [])
+        self.assertEqual(result["controllers"][0]["config_ids"], ["2"])

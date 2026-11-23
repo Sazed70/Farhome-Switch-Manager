@@ -44,15 +44,24 @@ async def async_setup( hass: HomeAssistant, config: ConfigType ):
     await async_migrate( hass, is_dev )
     
     async def reload_all( call ):
-        for switch_id in hass.data[DOMAIN][CONF_MANAGED_SWITCHES]:
-            hass.data[DOMAIN][CONF_MANAGED_SWITCHES][switch_id].unload()
-        hass.data[DOMAIN][CONF_BLUEPRINTS] = {}
-        hass.data[DOMAIN][CONF_MANAGED_SWITCHES] = {}
+        farhome = hass.data[DOMAIN].get('farhome')
+        async def _reload():
+            for switch_id in list(hass.data[DOMAIN][CONF_MANAGED_SWITCHES]):
+                hass.data[DOMAIN][CONF_MANAGED_SWITCHES][switch_id].unload()
+            hass.data[DOMAIN][CONF_BLUEPRINTS] = {}
+            hass.data[DOMAIN][CONF_MANAGED_SWITCHES] = {}
+            hass.data[DOMAIN].pop('farhome_z2m_cache', None)
 
-        await hass.data[DOMAIN][CONF_STORE].load()
-        await _init_blueprints(hass)
-        await _init_switch_configs(hass)
-        await async_bind_blueprint_images(hass)
+            await hass.data[DOMAIN][CONF_STORE].load()
+            await _init_blueprints(hass)
+            await _init_switch_configs(hass)
+            await async_bind_blueprint_images(hass)
+
+        if farhome is not None:
+            async with farhome.config_lock:
+                await _reload()
+        else:
+            await _reload()
 
     @callback
     def switch_merge_variables( call ):
@@ -76,6 +85,13 @@ async def async_setup_entry( hass, config_entry ):
     await async_setup_view(hass)
     await async_setup_connections( hass )
     await async_setup_farhome_websocket(hass)
+    if hass.data.get(DOMAIN, {}).pop('entry_unloaded', False):
+        farhome = hass.data[DOMAIN].get('farhome')
+        if farhome is not None:
+            async with farhome.config_lock:
+                await _init_switch_configs(hass)
+        else:
+            await _init_switch_configs(hass)
 
     return True
 
@@ -83,8 +99,19 @@ async def async_unload_entry( hass: HomeAssistant, config_entry ):
     """Unload a config entry."""
     # Leaving the panel behind makes the next setup fail with "Overwriting panel"
     async_remove_view( hass )
-    for switch_id in hass.data[DOMAIN].get(CONF_MANAGED_SWITCHES, {}):
-        hass.data[DOMAIN][CONF_MANAGED_SWITCHES][switch_id].unload()
+    domain_data = hass.data.get(DOMAIN, {})
+    farhome = domain_data.get('farhome')
+    async def _unload_switches():
+        for switch_id in list(domain_data.get(CONF_MANAGED_SWITCHES, {})):
+            domain_data[CONF_MANAGED_SWITCHES][switch_id].unload()
+        domain_data[CONF_MANAGED_SWITCHES] = {}
+        domain_data['entry_unloaded'] = True
+
+    if farhome is not None:
+        async with farhome.config_lock:
+            await _unload_switches()
+    else:
+        await _unload_switches()
     return True
 
 async def async_migrate( hass, in_dev ):

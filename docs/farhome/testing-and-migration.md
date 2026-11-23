@@ -6,10 +6,12 @@ Nessuna release applicativa.
 ## Comportamento implementato
 
 - Stanze dal registro HA, incluse stanze vuote, Senza stanza e Da associare.
-- Controller individuati da configurazioni esistenti, definizioni Zigbee2MQTT con
-  azioni, o aggiunta manuale dal registro; nessuna deduzione dalla sola batteria.
-  Le associazioni MQTT ambigue richiedono conferma. Un dispositivo reinserito non
-  viene automaticamente associato a una vecchia configurazione fisica.
+- Controller individuati da configurazioni esistenti (incluse configurazioni Zigbee2MQTT
+  in modalità comando), definizioni Zigbee2MQTT con azioni, o aggiunta manuale dal
+  registro; nessuna deduzione dalla sola batteria. La discovery Zigbee2MQTT usa un
+  breve debounce sui messaggi retained e una cache temporanea di 5 s per evitare
+  attese ripetute. Le associazioni MQTT ambigue richiedono conferma. Un dispositivo
+  reinserito non viene automaticamente associato a una vecchia configurazione fisica.
 - Raggruppamento per produttore/modello, ordinamento locale dei nomi, una voce per
   controller e scelta esplicita fra più configurazioni.
 - Miniature del modello esatto dichiarato in Zigbee2MQTT o del blueprint associato,
@@ -22,11 +24,15 @@ Nessuna release applicativa.
   La velocità è disponibile per un singolo ventilatore che la supporta e viene
   rimossa passando a una stanza. Un’entità unavailable conserva il suo identificatore.
 - Per una singola luce, **Accendi** e **Accendi / spegni** mostrano lo slider della
-  luminosità, la temperatura del bianco entro i limiti della lampadina e la tavolozza
+  luminosità, il campo **Transizione (s)** solo se supportato dalla lampadina, la
+  temperatura del bianco entro i limiti della lampadina e la tavolozza
   RGB, in base alle capacità del dispositivo. **Usa valore predefinito** omette la
   luminosità; **Predefinita** omette la tonalità. Bianco e colore sono due modalità
   dello stesso parametro. L’anteprima si aggiorna sullo schermo mentre regoli i
   valori. **Salva gesti** registra le impostazioni per il prossimo utilizzo del pulsante.
+- Configurazioni con `is_mismatch` mostrano un avviso dedicato e il pulsante
+  **Allinea al blueprint** per riallineare i pulsanti al blueprint corrente senza
+  passare all’editor legacy.
 - Sequenze non completamente riconosciute restano avanzate e passano all’editor
   HA corrente. La sostituzione rapida è esplicita e riguarda un solo gesto.
   L’editor nuovo non invia azioni a luci, ventilatori o prese durante la configurazione.
@@ -104,8 +110,9 @@ le suite, compreso ricaricamento del vero Store HA e del helper input_select.
 Il job Python usa Ubuntu 24.04, per cui GitHub Actions distribuisce Python 3.14.2,
 e basa la cache su `requirements-test.txt`.
 
-Prove locali: 65 test Python, 11 test Node, controllo
-TypeScript, build e due suite browser. Le regressioni aggiunte verificano che il
+Prove locali: 78 test Python (su ambiente isolato WSL Debian con Python 3.14.2 e
+HA 2026.11.0), 13 test Node, controllo TypeScript, build Rollup, due suite browser
+e analisi statica `ruff` (0 errori). Le regressioni aggiunte verificano che il
 cambio di destinatario conservi i parametri del gesto, che la conferma del
 selettore sia disabilitata durante un salvataggio e si chiuda al cambio di gesto,
 e che il riepilogo segua lo stato corrente dell’helper. I test coprono anche scritture fallite,

@@ -5,13 +5,13 @@ import {keyed} from 'lit/directives/keyed.js';
 import {repeat} from 'lit/directives/repeat.js';
 import type {Blueprint,Route} from '../types.js';
 import {createEmptyConfig} from '../helpers.js';
-import type {FarhomeHass,Controller,BlueprintChoice,ConfigEnvelope,EditableConfig,Binding,QuickAction,QuickPatch,Domain,ScriptMode,SelectorPatch,SelectorKind} from './types.js';
+import type {FarhomeHass,Controller,BlueprintChoice,ConfigEnvelope,EditableConfig,Binding,QuickAction,QuickPatch,Domain,ScriptMode,SelectorPatch,SelectorKind,EntityState} from './types.js';
 import {FarhomeApi} from './api.js';
 import {t,TextKey,errorKey,gestureTitle} from './i18n.js';
 import {controls} from './styles.js';
 import {syncModalDialog} from './dialog.js';
 import {matchingGestures,sharesIdentifier} from './blueprint-change.js';
-import {buildQuickAction,parseQuickAction,supportedQuickActions,supportedAreaQuickActions,supportsBrightness,supportsColor,supportsColorTemperature,lightTemperatureRange,buildSelectorAction,parseSelectorAction} from './actions.js';
+import {buildQuickAction,parseQuickAction,supportedQuickActions,supportedAreaQuickActions,supportsBrightness,supportsColor,supportsColorTemperature,supportsTransition,lightTemperatureRange,buildSelectorAction,parseSelectorAction} from './actions.js';
 import {FarhomeSelectorEditor} from './selector-editor.js';
 import './selector-editor.js';
 import './light-settings.js';
@@ -60,8 +60,35 @@ export class FarhomeDeviceEditor extends LitElement{
   protected selectors=new Map<string,SelectorPatch>();
   private token=0;
   private suggestedIdentifier=false;
+  private cachedStates?:Record<string,EntityState>;
+  private cachedLanguage?:string;
+  private cachedByDomain=new Map<Domain,EntityState[]>();
+  private cachedHelpers?:EntityState[];
   private text=(key:TextKey)=>t(this.hass?.language,key);
   private get api(){return new FarhomeApi(this.hass);}
+  private ensureStatesCache(){
+    if(this.cachedStates===this.hass.states&&this.cachedLanguage===this.hass.language)return;
+    this.cachedStates=this.hass.states;this.cachedLanguage=this.hass.language;
+    this.cachedByDomain.clear();this.cachedHelpers=undefined;
+  }
+  private domainEntities(domain:Domain){
+    this.ensureStatesCache();
+    let list=this.cachedByDomain.get(domain);
+    if(!list){
+      list=Object.values(this.hass.states).filter(item=>item.entity_id.startsWith(domain+'.')).sort((a,b)=>String(a.attributes.friendly_name||a.entity_id).localeCompare(String(b.attributes.friendly_name||b.entity_id),this.hass.language));
+      this.cachedByDomain.set(domain,list);
+    }
+    return list;
+  }
+  private helperEntities(){
+    this.ensureStatesCache();
+    if(!this.cachedHelpers){
+      this.cachedHelpers=Object.values(this.hass.states).filter(entity=>/^input_select\.[a-z0-9_]+$/.test(entity.entity_id)
+        &&Array.isArray(entity.attributes.options)&&entity.attributes.options.length>0
+        &&entity.attributes.options.every((id:unknown)=>typeof id==='string'&&/^light\.[a-z0-9_]+$/.test(id)&&!!this.hass.states[id]));
+    }
+    return this.cachedHelpers;
+  }
   private get showsSetupForm(){return !this.draft&&!this.loading&&!this.readonly&&(!this.controller.config_ids.length||this.preparing);}
   private blueprintHint(){
     const suggestion=this.controller.blueprint_suggestion;
@@ -164,6 +191,7 @@ export class FarhomeDeviceEditor extends LitElement{
     const entity=this.hass.states[target];
     if(next.domain==='light'&&entity){
       if(!supportsBrightness(entity))delete next.brightness_pct;
+      if(!supportsTransition(entity))delete next.transition;
       if(!supportsColor(entity))delete next.rgb_color;
       if(next.color_temp_kelvin!==undefined){
         const [min,max]=lightTemperatureRange(entity);
@@ -195,7 +223,7 @@ export class FarhomeDeviceEditor extends LitElement{
     if(value.domain==='fan'&&kind==='on'&&percentage!==undefined)next.percentage=percentage;
     this.setQuick(next);
   }
-  private advancedChanged(event:CustomEvent){if(this.busy||this.readonly||!Array.isArray(event.detail.value))return;const [b,a]=this.indices;this.draft!.buttons[b].actions[a]={...this.action!,sequence:structuredClone(event.detail.value)};this.quick.delete(this.selected);this.selectors.delete(this.selected);this.changed();}
+  private advancedChanged(event:CustomEvent){if(this.busy||this.readonly||!this.action||!Array.isArray(event.detail.value))return;const [b,a]=this.indices;this.draft!.buttons[b].actions[a]={...this.action,sequence:structuredClone(event.detail.value)};this.quick.delete(this.selected);this.selectors.delete(this.selected);this.changed();}
   private numeric(label:TextKey,key:keyof QuickAction,value:QuickAction,min:number,max?:number,optional=false){return html`<label>${this.text(label)}<input type="number" min=${min} max=${max??nothing} step="any" .value=${String(value[key]??'')} ?required=${!optional} ?disabled=${this.busy||this.readonly} @input=${(e:Event)=>{const input=e.target as HTMLInputElement;const next={...value};if(optional&&!input.value)delete next[key];else if(Number.isFinite(input.valueAsNumber))(next as any)[key]=input.valueAsNumber;else return;this.setQuick(next);}}></label>`;}
   private quickForm(value:QuickAction){
     const isArea=!!value.area_id;
@@ -215,12 +243,12 @@ export class FarhomeDeviceEditor extends LitElement{
           </optgroup>`:nothing}
         <optgroup label=${this.text('individual_entities')}>
           ${!entity&&!isArea&&value.entity_id?html`<option value=${value.entity_id} .selected=${true}>${value.entity_id} · ${this.text('unavailable')}</option>`:nothing}
-          ${Object.values(this.hass.states).filter(item=>item.entity_id.startsWith(value.domain+'.')).sort((a,b)=>String(a.attributes.friendly_name||a.entity_id).localeCompare(String(b.attributes.friendly_name||b.entity_id),this.hass.language)).map(item=>html`<option value=${item.entity_id} .selected=${item.entity_id===value.entity_id}>${item.attributes.friendly_name||item.entity_id}${item.state==='unavailable'?' · '+this.text('unavailable'):''}</option>`)}
+          ${this.domainEntities(value.domain).map(item=>html`<option value=${item.entity_id} .selected=${item.entity_id===value.entity_id}>${item.attributes.friendly_name||item.entity_id}${item.state==='unavailable'?' · '+this.text('unavailable'):''}</option>`)}
         </optgroup>
       </select></label>
       <label>${this.text('function')}<select aria-label=${this.text('function')} ?disabled=${this.busy||this.readonly||!options.length} @change=${(e:Event)=>this.changeKind(value,(e.target as HTMLSelectElement).value as QuickAction['kind'])}>${!options.some(x=>x.kind===value.kind)?html`<option value=${value.kind} .selected=${true}>${this.text(('action_'+value.kind) as TextKey)} · ${this.text('unavailable')}</option>`:nothing}${options.map(option=>html`<option value=${option.kind} .selected=${option.kind===value.kind}>${this.text(option.label_key as TextKey)}</option>`)}</select></label>
       ${!isArea&&['increase','decrease'].includes(value.kind)?this.numeric(value.domain==='fan'?'step_speed':'step_brightness','step',value,.1,100):nothing}
-      ${value.domain==='light'?this.numeric('transition','transition',value,0,3600,true):nothing}
+      ${value.domain==='light'&&(isArea||(entity&&supportsTransition(entity)))?this.numeric('transition','transition',value,0,3600,true):nothing}
       ${lightTurnOn&&isArea?this.numeric('brightness','brightness_pct',value,0,100,true):nothing}
       ${lightTurnOn&&isArea?this.numeric('kelvin','color_temp_kelvin',value,1,undefined,true):nothing}
       ${value.domain==='fan'&&value.kind==='on'&&(Number(entity?.attributes.supported_features)&1)?this.numeric('percentage','percentage',value,0,100,true):nothing}
@@ -350,6 +378,15 @@ export class FarhomeDeviceEditor extends LitElement{
     const blueprint=this.blueprints[this.newBlueprint];if(!blueprint||!this.newIdentifier.trim()||!this.newName.trim()){this.error='invalid_form';return;}
     this.draft={...createEmptyConfig(blueprint),id:null,name:this.newName,identifier:this.newIdentifier,enabled:false};this.binding={device_id:this.controller.device_id,verified:false};this.selected='0:0';this.showAdvanced=false;this.selectorPending=false;this.preparing=true;this.markDirty();
   }
+  private async fixMismatch(){
+    if(!this.envelope||!this.draft||this.saving||this.readonly||this.hasHelperDirty)return;
+    this.busy=true;this.error=undefined;
+    try{
+      const response=await this.api.save(structuredClone(this.draft),this.binding,this.envelope.revision,[],[],true);
+      const selected=this.selected;this.adopt(response);this.selected=selected;this.saved=true;
+      this.dispatchEvent(new CustomEvent('save',{detail:response,bubbles:true,composed:true}));
+    }catch(err){this.error=errorKey(err,'save_error');}finally{this.busy=false;}
+  }
   async save(forNavigation=false):Promise<boolean>{
     if(this.creatingSelector||(forNavigation&&this.helperDirty)){this.error='helper_draft_pending';return false;}
     if(this.saving||!this.draft||this.readonly||this.changingBlueprint)return false;
@@ -425,9 +462,7 @@ export class FarhomeDeviceEditor extends LitElement{
     const savedHelper=this.envelope?.metadata?.selector_helper;
     const canLink=!this.draft?.enabled||this.canEditHelper;
     const blocked=this.saving||this.helperDirty;
-    const options=Object.values(this.hass.states).filter(entity=>/^input_select\.[a-z0-9_]+$/.test(entity.entity_id)
-      &&Array.isArray(entity.attributes.options)&&entity.attributes.options.length>0
-      &&entity.attributes.options.every((id:unknown)=>typeof id==='string'&&/^light\.[a-z0-9_]+$/.test(id)&&!!this.hass.states[id]));
+    const options=this.helperEntities();
     return html`<details class="card" open=${helper||this.creatingSelector?true:nothing}><summary><span>${this.text('selector')}${helper?html` <small class="muted">· ${helper}</small>`:nothing}</span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="details-body stack setup">
       ${!canLink?html`<p class="muted">${this.text('helper_requires_disabled')}</p>`:this.creatingSelector?html`<farhome-selector-editor creating .hass=${this.hass} .suggestedName=${`${this.draft!.name} · ${this.text('selector')}`.slice(0,255)}
         @selector-created=${(e:CustomEvent<{entity_id:string}>)=>{this.setCreatingSelector(false);this.linkSelector(e.detail.entity_id);}}
@@ -481,6 +516,7 @@ export class FarhomeDeviceEditor extends LitElement{
       ${this.showsSetupForm?this.setupForm():nothing}
       ${this.draft?html`
         ${!blueprint?html`<p class="notice">${this.text('no_blueprint')}</p>`:html`
+          ${this.draft.is_mismatch?html`<div class="notice stack"><p>${this.text('mismatch_notice')}</p>${!this.readonly&&this.envelope?html`<div><button type="button" ?disabled=${this.saving||this.hasHelperDirty} @click=${this.fixMismatch}>${this.text('fix_mismatch')}</button></div>`:nothing}</div>`:nothing}
           <div class="gesture-tabs" role="group" aria-label=${this.text('gestures')}>${blueprint.buttons.flatMap((button,b)=>button.actions.map((item,a)=>{const key=`${b}:${a}`;const configured=(this.draft?.buttons[b]?.actions[a]?.sequence.length||0)>0||this.quick.has(key)||this.selectors.has(key);return html`<button class=${configured?'configured':''} data-gesture=${key} aria-pressed=${key===this.selected} ?disabled=${this.busy} @click=${()=>{this.selected=key;this.showAdvanced=false;this.selectorPending=false;}}>${blueprint.buttons.length>1?`${this.text('button')} ${b+1} · `:''}${gestureTitle(this.hass.language,item.title)}</button>`;}))}</div>
           ${action?html`<div class="gesture-editor stack">
             <div class="gesture-header">

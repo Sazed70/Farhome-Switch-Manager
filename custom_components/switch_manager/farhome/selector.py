@@ -143,6 +143,8 @@ async def async_read_selector(hass, entity_id, *, config_id=None):
 
 
 async def async_update_selector(hass, entity_id, options, active, initial, expected_revision, dependencies_acknowledged, *, config_id=None):
+    if not isinstance(entity_id, str) or not HELPER.fullmatch(entity_id):
+        raise FarhomeError('validation_error', 'Seleziona un input_select esistente.')
     locks = hass.data[DOMAIN].setdefault('farhome_selector_locks', {})
     async with locks.setdefault(entity_id, asyncio.Lock()):
         # Serialize migration/activation changes with this helper edit, too.

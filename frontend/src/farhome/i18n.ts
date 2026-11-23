@@ -122,6 +122,8 @@ const extra={
   custom_zigbee2mqtt_image:['Zigbee2MQTT · Immagine personalizzata','Zigbee2MQTT · Custom image'],
   mode_single:['Singola','Single'],mode_restart:['Riavvia','Restart'],mode_queued:['In coda','Queued'],mode_parallel:['In parallelo','Parallel'],
   no_blueprint:['Blueprint non disponibile. Puoi sceglierne un altro in Associazione e attivazione.','Blueprint unavailable. Choose another in Binding and activation.'],
+  mismatch_notice:['I pulsanti salvati non corrispondono al blueprint attuale. Allinea la configurazione prima di modificare i gesti.','Saved buttons do not match the current blueprint. Align the configuration before editing gestures.'],
+  fix_mismatch:['Allinea al blueprint','Align with blueprint'],
   migration_draft:['Bozza Farhome disabilitata: nessun gestore esterno viene modificato.','Disabled Farhome draft: external handlers are unchanged.'],
   no_options:['Nessuna azione supportata per questo destinatario.','No supported action for this target.'],
   loop:['Ripeti fino al rilascio','Repeat until release'],loop_interval:['Intervallo ripetizione (ms)','Repeat interval (ms)'],

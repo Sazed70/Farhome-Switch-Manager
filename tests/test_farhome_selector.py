@@ -240,3 +240,8 @@ class SelectorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, ['light.b', 'light.b', 'light.a', 'light.a'])
         self.assertEqual([self.hass.states.get(entity).state for entity in ('light.a', 'light.b')], ['on', 'on'])
 
+    async def test_invalid_selector_id_does_not_allocate_lock(self):
+        with self.assertRaisesRegex(ValueError, 'validation_error'):
+            await async_update_selector(self.hass, 'bad.entity_id', ['light.a'], None, None, 'rev', False, config_id='1')
+        self.assertNotIn('bad.entity_id', self.hass.data[DOMAIN].get('farhome_selector_locks', {}))
+

@@ -1,6 +1,7 @@
 **/@eaDir
 **/Thumbs.db
 **/__pycache__/
+.ruff_cache/
 .vscode
 
 # Build artifacts

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseQuickAction, buildQuickAction, supportedQuickActions} from '../.test-build/farhome/actions.js';
+import {parseQuickAction, buildQuickAction, supportedQuickActions, supportsTransition} from '../.test-build/farhome/actions.js';
 
 const services = {
   light: {toggle:{},turn_on:{},turn_off:{}},
@@ -39,6 +39,8 @@ test('fan offers speed only for SET_SPEED and available services, never brightne
 test('onoff lights do not offer brightness steps',()=>{
   const entity={entity_id:'light.simple',state:'off',attributes:{supported_color_modes:['onoff']}};
   assert.deepEqual(supportedQuickActions(entity,services).map(x=>x.kind),['toggle','on','off']);
+  assert.equal(supportsTransition(entity),false);
+  assert.equal(supportsTransition({...entity,attributes:{...entity.attributes,supported_features:32}}),true);
 });
 test('unavailable target remains the configured entity',()=>{
   const entity={entity_id:'fan.air',state:'unavailable',attributes:{supported_features:49}};

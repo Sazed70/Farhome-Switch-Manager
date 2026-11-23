@@ -51,6 +51,13 @@ class QuickActionValidationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             validate_quick_action(self.hass,{'domain':'light','kind':'on','entity_id':'light.desk','color_temp_kelvin':9000,'mode':'single'})
 
+    def test_none_color_temperature_bounds_do_not_crash(self):
+        self.hass.states.async_set('light.none_bounds', 'off', {'supported_color_modes': ['color_temp'], 'min_color_temp_kelvin': None, 'max_color_temp_kelvin': None})
+        result = validate_quick_action(self.hass, {'domain': 'light', 'kind': 'on', 'entity_id': 'light.none_bounds', 'color_temp_kelvin': 3500, 'mode': 'single'})
+        self.assertEqual(result['sequence'][0]['data']['color_temp_kelvin'], 3500)
+        with self.assertRaisesRegex(ValueError, 'unsupported_color_temperature'):
+            validate_quick_action(self.hass, {'domain': 'light', 'kind': 'on', 'entity_id': 'light.none_bounds', 'color_temp_kelvin': 0, 'mode': 'single'})
+
     def test_rgb_is_saved_only_for_color_capable_lights_and_without_kelvin(self):
         self.hass.states.async_set('light.color', 'on', {'supported_color_modes': ['xy', 'color_temp']})
         quick = {'domain': 'light', 'kind': 'toggle', 'mode': 'single', 'entity_id': 'light.color', 'rgb_color': [51, 170, 102], 'brightness_pct': 62.5}

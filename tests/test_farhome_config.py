@@ -1,5 +1,4 @@
 import asyncio
-from copy import deepcopy
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -14,8 +13,8 @@ from custom_components.switch_manager.store import SwitchManagerStore
 from custom_components.switch_manager.connections import async_setup_connections
 from custom_components.switch_manager.farhome.store import FarhomeStore
 from custom_components.switch_manager.farhome.config_service import (
-    async_read_config, async_save_config, async_set_enabled,
-    async_delete_config, async_duplicate_config,
+    async_read_config, async_read_all_configs, async_save_config, async_set_enabled,
+    async_duplicate_config,
 )
 from tests.fixtures import MemoryStorage
 
@@ -59,7 +58,7 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
 
     async def call_legacy(self, handler, msg):
         results, errors = [], []
-        connection = SimpleNamespace(user=SimpleNamespace(is_admin=True), send_result=lambda key, value: results.append(value), send_error=lambda *args: errors.append(args))
+        connection = SimpleNamespace(user=SimpleNamespace(is_admin=True), context=lambda msg: None, send_result=lambda key, value=None: results.append(value), send_error=lambda *args: errors.append(args))
         handler(self.hass, connection, {"id": 4, **msg})
         # HA deliberately schedules WebSocket handlers as background tasks.
         await self.hass.async_block_till_done(wait_background_tasks=True)
@@ -251,3 +250,83 @@ class ConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['config']['buttons'][0]['actions'][0]['sequence'],[{'action':'fan.increase_speed','target':{'entity_id':'fan.air'},'data':{'percentage_step':10}}])
         self.assertEqual(config['buttons'][0]['actions'][0]['sequence'],[])
         self.assertFalse(result['config']['enabled'])
+
+    async def test_websocket_discovery_copy_from_and_run_action_safety(self):
+        handlers = await self.legacy_handlers()
+        # Missing/unknown blueprint returns error instead of crashing or hanging.
+        for msg in ({"blueprint_id": "missing"}, {"blueprint_id": "synthetic"}):
+            errors = []
+            connection = SimpleNamespace(user=SimpleNamespace(is_admin=True), subscriptions={}, send_result=lambda *args: None, send_error=lambda *args, _errors=errors: _errors.append(args))
+            if msg["blueprint_id"] == "synthetic":
+                with patch.object(self.hass.data[DOMAIN][CONF_BLUEPRINTS]["synthetic"], "start_discovery", AsyncMock(return_value=None)):
+                    handlers["websocket_blueprint_auto_discovery"](self.hass, connection, {"id": 1, **msg})
+                    await self.hass.async_block_till_done(wait_background_tasks=True)
+            else:
+                handlers["websocket_blueprint_auto_discovery"](self.hass, connection, {"id": 1, **msg})
+                await self.hass.async_block_till_done(wait_background_tasks=True)
+            self.assertEqual(len(errors), 1)
+
+        # copy_from_list skips configs with invalid blueprints.
+        valid = await self.create()
+        broken_data = self.draft()
+        broken_data.update(id="9", blueprint="missing-bp", enabled=False)
+        with self.assertLogs("custom_components.switch_manager", level="ERROR"):
+            self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES]["9"] = ManagedSwitchConfig(self.hass, "missing-bp", "9", broken_data)
+        copied = await self.call_legacy(handlers["websocket_copy_from_list"], {"blueprint_id": "synthetic"})
+        self.assertEqual([item.id for item in copied["switches"]], [valid["config_id"]])
+
+        # websocket_configs reads all configs under lock.
+        all_configs = await async_read_all_configs(self.hass)
+        self.assertIn(valid["config_id"], all_configs["configs"])
+        self.assertIn(valid["config_id"], all_configs["revisions"])
+
+        # websocket_run_action unloads its temporary Script and handles schema errors.
+        unload_mock = AsyncMock()
+        with patch("custom_components.switch_manager.connections.Script") as script_cls:
+            script_cls.return_value = SimpleNamespace(async_run=AsyncMock(), async_unload=unload_mock)
+            await self.call_legacy(handlers["websocket_run_action"], {"action": {"delay": {"milliseconds": 1}}})
+            unload_mock.assert_awaited_once()
+        bad_errors = []
+        bad_conn = SimpleNamespace(user=SimpleNamespace(is_admin=True), context=lambda msg: None, send_result=lambda *args: None, send_error=lambda *args: bad_errors.append(args))
+        handlers["websocket_run_action"](self.hass, bad_conn, {"id": 5, "action": {"not_a_valid_key": 1}})
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(bad_errors[0][1], "action_failed")
+
+    async def test_replace_runtime_unloads_old_and_start_waits_for_scripts(self):
+        # Slow script creation must complete before start() returns.
+        gate = asyncio.Event()
+        from custom_components.switch_manager.models import ManagedSwitchConfigButtonAction
+        real_make = ManagedSwitchConfigButtonAction._make_script
+
+        async def slow_make(self_action, sequence):
+            await gate.wait()
+            return await real_make(self_action, sequence)
+
+        draft = self.draft()
+        draft["buttons"][0]["actions"][0]["sequence"] = [{"delay": {"milliseconds": 1}}]
+        with patch.object(ManagedSwitchConfigButtonAction, "_make_script", slow_make), patch(
+            "custom_components.switch_manager.models.create_event_listeners", AsyncMock(return_value=[])
+        ) as listen_mock:
+            cfg = ManagedSwitchConfig(self.hass, self.hass.data[DOMAIN][CONF_BLUEPRINTS]["synthetic"], "10", draft)
+            start_task = asyncio.create_task(cfg.start())
+            await asyncio.sleep(0)
+            self.assertFalse(start_task.done())
+            listen_mock.assert_not_awaited()
+            gate.set()
+            await start_task
+            self.assertIsNotNone(cfg.buttons[0].actions[0].script)
+            listen_mock.assert_awaited_once()
+            cfg.unload()
+
+        # _replace_runtime failure unloads old switch instead of leaving scripts loaded.
+        initial = await self.create()
+        old_runtime = self.hass.data[DOMAIN][CONF_MANAGED_SWITCHES][initial["config_id"]]
+        updated = self.draft()
+        updated["id"] = initial["config_id"]
+        updated["name"] = "Start fails"
+        with patch.object(old_runtime, "unload", wraps=old_runtime.unload) as old_unload, patch.object(
+            ManagedSwitchConfig, "start", AsyncMock(side_effect=RuntimeError("boom"))
+        ):
+            with self.assertRaisesRegex(ValueError, "partial_write"):
+                await async_save_config(self.hass, updated, None, initial["revision"])
+            old_unload.assert_called_once()
